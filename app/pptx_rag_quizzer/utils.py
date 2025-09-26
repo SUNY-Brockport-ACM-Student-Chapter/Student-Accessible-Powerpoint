@@ -22,15 +22,16 @@ def ExtractText_OCR(img_bytes):
     Returns:
         str: The extracted text from the image.
     """
-    try:
-        # Extract text using OCR (Tesseract)
-        img = Image.open(io.BytesIO(img_bytes))
-        text = pytesseract.image_to_string(img)
-        return text.strip()
+    # try:
+    #     # Extract text using OCR (Tesseract)
+    #     img = Image.open(io.BytesIO(img_bytes))
+    #     text = pytesseract.image_to_string(img)
+    #     return text.strip()
 
-    except Exception as e:
-        print(f"Error during OCR extraction: {e}")
-        return ""
+    # except Exception as e:
+    #     print(f"Error during OCR extraction: {e}")
+    #     return ""
+    return "<THIS OCR TEXT IS IN DEVELOPMENT AND SHOULD BE DISREGARDED>"
 
 
 def clean_text(text):
