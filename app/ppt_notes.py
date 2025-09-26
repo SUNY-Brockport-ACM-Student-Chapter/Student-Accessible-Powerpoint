@@ -7,11 +7,39 @@ import io
 import uuid
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
 from dotenv import load_dotenv
+
+# Import Wand for WMF support
+try:
+    from wand.image import Image as WandImage
+    WAND_AVAILABLE = True
+except ImportError:
+    WAND_AVAILABLE = False
+
+def safe_open_image(img_bytes: bytes):
+    """Safely load images including WMF formats that Pillow cannot handle.
+    
+    Args:
+        img_bytes: Image data as bytes
+        
+    Returns:
+        PIL Image object
+        
+    Raises:
+        RuntimeError: If WMF images cannot be processed and Wand is not available
+    """
+    try:
+        return Image.open(io.BytesIO(img_bytes))
+    except (OSError, UnidentifiedImageError):
+        if not WAND_AVAILABLE:
+            raise RuntimeError("Wand (ImageMagick) is required to handle WMF images. Install with `pip install Wand`.")
+        with WandImage(blob=img_bytes, format="wmf") as wmf:
+            png_bytes = wmf.make_blob("png")
+        return Image.open(io.BytesIO(png_bytes))
 
 # Import our RAG modules
 from pptx_rag_quizzer.utils import parse_powerpoint
@@ -445,11 +473,8 @@ def main():
                 st.write(f"**Image {batch_start + i + 1}** (Slide {img_item.slide_number})")
                 
                 # Display image
-                st.image(
-                    Image.open(io.BytesIO(img_item.image_bytes)),
-                    width=400,
-                    caption=f"Slide {img_item.slide_number} - Image {batch_start + i + 1}"
-                )
+                img = safe_open_image(img_item.image_bytes)
+                st.image(img, width=400, caption=f"Slide {img_item.slide_number} - Image {batch_start + i + 1}")
                 
                 # Editable description
                 new_description = st.text_area(
