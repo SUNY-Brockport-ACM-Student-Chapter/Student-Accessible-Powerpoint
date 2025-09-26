@@ -27,19 +27,28 @@ def safe_open_image(img_bytes: bytes):
         img_bytes: Image data as bytes
         
     Returns:
-        PIL Image object
+        BytesIO buffer containing PNG image data for Streamlit compatibility
         
     Raises:
         RuntimeError: If WMF images cannot be processed and Wand is not available
     """
-    try:
-        return Image.open(io.BytesIO(img_bytes))
-    except (OSError, UnidentifiedImageError):
+    # Detect WMF header quickly
+    if img_bytes[:4] in (b'\xd7\xcd\xc6\x9a', b'\x01\x00\x09\x00'):
         if not WAND_AVAILABLE:
-            raise RuntimeError("Wand (ImageMagick) is required to handle WMF images. Install with `pip install Wand`.")
+            raise RuntimeError("Wand (ImageMagick) required for WMF images. Install with `pip install Wand` and ensure ImageMagick is installed.")
         with WandImage(blob=img_bytes, format="wmf") as wmf:
             png_bytes = wmf.make_blob("png")
-        return Image.open(io.BytesIO(png_bytes))
+        return io.BytesIO(png_bytes)
+
+    # Non-WMF → fallback to Pillow
+    try:
+        return io.BytesIO(img_bytes)
+    except (OSError, UnidentifiedImageError):
+        if not WAND_AVAILABLE:
+            raise
+        with WandImage(blob=img_bytes) as img:
+            png_bytes = img.make_blob("png")
+        return io.BytesIO(png_bytes)
 
 # Import our RAG modules
 from pptx_rag_quizzer.utils import parse_powerpoint
@@ -473,8 +482,8 @@ def main():
                 st.write(f"**Image {batch_start + i + 1}** (Slide {img_item.slide_number})")
                 
                 # Display image
-                img = safe_open_image(img_item.image_bytes)
-                st.image(img, width=400, caption=f"Slide {img_item.slide_number} - Image {batch_start + i + 1}")
+                img_buf = safe_open_image(img_item.image_bytes)
+                st.image(img_buf, width=400, caption=f"Slide {img_item.slide_number} - Image {batch_start + i + 1}")
                 
                 # Editable description
                 new_description = st.text_area(
