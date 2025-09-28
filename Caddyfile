@@ -1,0 +1,19 @@
+access.brockportsigai.org {
+  encode zstd gzip
+
+  @web path *
+  reverse_proxy web:8501 {
+    header_up Host {host}
+    header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-For {remote}
+  }
+
+  # Optional: increase timeouts for long processing
+  tls {
+    issuer acme {
+      email {$ACME_EMAIL}
+    }
+  }
+}
+
+

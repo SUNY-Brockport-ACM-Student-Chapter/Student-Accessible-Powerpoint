@@ -4,6 +4,7 @@ import os
 import time
 import base64
 import io
+import gzip
 import uuid
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -21,31 +22,51 @@ except ImportError:
     WAND_AVAILABLE = False
 
 def safe_open_image(img_bytes: bytes):
-    """Safely load images including WMF formats that Pillow cannot handle.
+    """Safely load images including WMF/EMF and compressed EMZ/WMZ.
     
-    Args:
-        img_bytes: Image data as bytes
-        
-    Returns:
-        PIL Image object (converted to PNG if WMF detected)
-        
-    Raises:
-        RuntimeError: If WMF images cannot be processed and Wand is not available
+    Returns a PIL.Image.Image. For vector formats, converts to PNG via Wand.
     """
-    # Always try to open with Pillow first
+    data = img_bytes
+
+    # Handle EMZ/WMZ (gzip-compressed EMF/WMF)
+    if len(data) >= 2 and data[:2] == b'\x1f\x8b':
+        try:
+            data = gzip.decompress(data)
+        except Exception:
+            pass
+
+    # Try Pillow first
     try:
-        img = Image.open(io.BytesIO(img_bytes))
-        if img.format and img.format.lower() == "wmf":
-            raise OSError("Force WMF fallback")
+        img = Image.open(io.BytesIO(data))
+        fmt = (img.format or "").lower()
+        if fmt in ("wmf", "emf"):
+            raise OSError("Force vector fallback")
+        img.load()
         return img
     except (OSError, UnidentifiedImageError):
         if not WAND_AVAILABLE:
-            raise RuntimeError("Wand (ImageMagick) is required to handle WMF/EMF images. "
-                               "Install with `pip install Wand` and ensure ImageMagick is installed.")
-        # Convert WMF → PNG in memory
-        with WandImage(blob=img_bytes, format="wmf") as wmf:
-            png_bytes = wmf.make_blob("png")
-        return Image.open(io.BytesIO(png_bytes))
+            raise RuntimeError(
+                "Wand (ImageMagick) is required to handle WMF/EMF images. "
+                "Install with `pip install Wand` and ensure ImageMagick + libwmf delegates are installed and enabled."
+            )
+
+        last_error = None
+        for fmt in (None, "wmf", "emf"):
+            try:
+                if fmt:
+                    with WandImage(blob=data, format=fmt) as v:
+                        png_bytes = v.make_blob("png")
+                else:
+                    with WandImage(blob=data) as v:
+                        png_bytes = v.make_blob("png")
+                return Image.open(io.BytesIO(png_bytes))
+            except Exception as e:
+                last_error = e
+                continue
+
+        raise RuntimeError(
+            f"ImageMagick/Wand cannot read this vector image. Ensure WMF/EMF delegates are installed and not blocked in policy.xml. Details: {last_error}"
+        )
 
 # Import our RAG modules
 from pptx_rag_quizzer.utils import parse_powerpoint
@@ -55,6 +76,9 @@ from models.models import Presentation as PresentationModel
 
 # Load environment variables
 load_dotenv()
+
+# Service configuration
+CHROMA_API_URL = os.getenv("CHROMA_API_URL", "http://localhost:8001")
 
 # Configure API key
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -139,7 +163,7 @@ def process_powerpoint_with_rag_enhanced(pptx_path, output_path, presentation_mo
     prs = Presentation(pptx_path)
     
     # Initialize RAG core and image processor
-    rag_core = RAGCore()
+    rag_core = RAGCore(chroma_api_url=CHROMA_API_URL)
     image_processor = ImageProcessor(rag_core)
     
     total_images = 0
@@ -372,7 +396,7 @@ def main():
                         presentation_model = parse_powerpoint_file(file_bytes, uploaded_file.name)
                         
                         # Initialize RAG core and create collection from text content
-                        rag_core = RAGCore()
+                        rag_core = RAGCore(chroma_api_url=CHROMA_API_URL)
                         collection_id = rag_core.create_collection(presentation_model)
                         
                         # Initialize image processor
