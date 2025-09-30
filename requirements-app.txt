@@ -1,0 +1,16 @@
+# App-only requirements for the Streamlit PowerPoint Accessibility tool
+# Excludes API and ChromaDB server dependencies
+
+streamlit>=1.50.0
+python-pptx>=1.0.2
+Pillow>=11.3.0
+google-generativeai>=0.8.5
+python-dotenv>=1.1.1
+pydantic>=2.11.9
+requests>=2.32.5
+pytesseract>=0.3.13
+
+# Optional: WMF/EMF image support via ImageMagick (install ImageMagick separately)
+Wand>=0.6.13
+
+
