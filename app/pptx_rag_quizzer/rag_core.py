@@ -88,9 +88,9 @@ class ChromaHTTPClient:
         return response.json()
 
 def get_chroma_http_client_instance(api_url=None):
-    """Get ChromaDB HTTP client instance"""
+    """Get ChromaDB HTTP client instance. Uses CHROMA_API_URL env var if not provided."""
     if api_url is None:
-        api_url = "http://localhost:8001"
+        api_url = os.getenv("CHROMA_API_URL", "http://localhost:8001")
     return ChromaHTTPClient(api_url)
 
 def get_llm_model():
@@ -134,10 +134,14 @@ class RAGCore:
             chroma_api_url: ChromaDB API service URL (for production environments)
         """
         self.llm_model = get_llm_model()
+        
+        # Resolve Chroma API URL: parameter -> env var -> localhost default
+        if chroma_api_url is None:
+            chroma_api_url = os.getenv("CHROMA_API_URL", "http://localhost:8001")
         self.chroma_api_url = chroma_api_url
         
         # Always use HTTP API client (no ChromaDB dependencies)
-        self.chroma_api = get_chroma_http_client_instance(api_url=chroma_api_url)
+        self.chroma_api = get_chroma_http_client_instance(api_url=self.chroma_api_url)
 
     def create_collection(self, data: Presentation):
         """
