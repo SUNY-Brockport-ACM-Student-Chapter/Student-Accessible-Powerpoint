@@ -188,12 +188,21 @@ def process_powerpoint_with_rag_enhanced(pptx_path, output_path, presentation_mo
                         # Fallback to basic description
                         image_description = "Image content - detailed description not available"
                     
-                    # Create optimized alt text
-                    context = f"Slide: {slide_title}"
-                    alt_text = create_accessible_alt_text(image_description, slide_index + 1, image_counter, context)
+                    # Use the image caption/description directly for alt text
+                    alt_text = (image_description or "").strip()
+                    if not alt_text:
+                        alt_text = f"Image {image_counter} on slide {slide_index + 1}"
                     
-                    # Add alt text to the image
-                    shape.element.set("descr", alt_text)
+
+                    # Set native PPTX alt text via underlying cNvPr descr attribute
+                    try:
+                        shape._element._nvXxPr.cNvPr.attrib["descr"] = alt_text
+                    except Exception:
+                        # Fallback to python-pptx property if needed
+                        try:
+                            shape.alternative_text = alt_text
+                        except Exception:
+                            pass
                     
                     # Add to notes with detailed information
                     note_text = (
@@ -211,7 +220,13 @@ def process_powerpoint_with_rag_enhanced(pptx_path, output_path, presentation_mo
                     st.warning(f"Could not process image on slide {slide_index + 1}: {str(e)}")
                     # Add fallback alt text
                     fallback_alt = f"Image on slide {slide_index + 1} - Unable to process"
-                    shape.alternative_text = fallback_alt
+                    try:
+                        shape._element._nvXxPr.cNvPr.attrib["descr"] = fallback_alt
+                    except Exception:
+                        try:
+                            shape.alternative_text = fallback_alt
+                        except Exception:
+                            pass
                     notes_texts.append(f"⚠️ Image {image_counter}: Processing failed - {str(e)}\n")
                     image_counter += 1
             
