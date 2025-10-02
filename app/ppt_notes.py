@@ -407,6 +407,68 @@ def main():
                     except Exception as e:
                         st.error(f"❌ Error processing PowerPoint: {str(e)}")
                         st.exception(e)
+
+            if st.button("⚡ Quick Generate & Download (Skip Review)", use_container_width=True):
+                with st.spinner("Generating accessible PowerPoint (skipping review)..."):
+                    try:
+                        # Parse the PowerPoint file
+                        file_bytes = uploaded_file.read()
+                        presentation_model = parse_powerpoint_file(file_bytes, uploaded_file.name)
+
+                        # Initialize RAG core and create initial collection from text content
+                        rag_core = RAGCore()
+                        collection_id = rag_core.create_collection(presentation_model)
+
+                        # Initialize image processor
+                        image_processor = ImageProcessor(rag_core)
+
+                        # Auto-generate descriptions for all images without going through review UI
+                        for slide in presentation_model.slides:
+                            for item in slide.items:
+                                if item.type.value == 'image':
+                                    if not item.content or item.content.lower() in ['none', 'null', '']:
+                                        try:
+                                            image_description = image_processor.describe_image(
+                                                item.image_bytes,
+                                                item.extension,
+                                                item.slide_number,
+                                                collection_id
+                                            )
+                                            if image_description and image_description.startswith("Description: "):
+                                                image_description = image_description[len("Description: "):]
+                                            if image_description and image_description != "None":
+                                                item.content = image_description
+                                            else:
+                                                item.content = "No description available"
+                                        except Exception as e:
+                                            item.content = f"Error describing image: {e}"
+
+                        # Rebuild collection including image descriptions
+                        rag_core.remove_collection(collection_id)
+                        enhanced_collection_id = rag_core.create_collection(presentation_model)
+
+                        # Save temporary file for processing
+                        temp_path = f"temp_{uploaded_file.name}"
+                        with open(temp_path, "wb") as f:
+                            f.write(file_bytes)
+
+                        # Process with enhanced RAG and write accessibility features
+                        output_path = f"accessible_{uploaded_file.name}"
+                        process_powerpoint_with_rag_enhanced(
+                            temp_path, output_path, presentation_model, enhanced_collection_id, {}
+                        )
+
+                        # Clean up temp file
+                        os.remove(temp_path)
+
+                        # Jump straight to download stage
+                        st.session_state.output_path = output_path
+                        st.session_state.processing_stage = 'download'
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error(f"❌ Error generating accessible PowerPoint: {str(e)}")
+                        st.exception(e)
     
     # Stage 2: Image Description and Batch Processing
     elif st.session_state.processing_stage == 'describe_images':
