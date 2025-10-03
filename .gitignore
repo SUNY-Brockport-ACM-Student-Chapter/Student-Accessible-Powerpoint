@@ -3,3 +3,5 @@
 *.pptx
 /venv
 .env
+
+*.csv

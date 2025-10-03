@@ -5,6 +5,8 @@ import time
 import base64
 import io
 import uuid
+import csv
+from datetime import datetime
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from PIL import Image, UnidentifiedImageError
@@ -46,6 +48,19 @@ def safe_open_image(img_bytes: bytes):
         with WandImage(blob=img_bytes, format="wmf") as wmf:
             png_bytes = wmf.make_blob("png")
         return Image.open(io.BytesIO(png_bytes))
+
+# Save consent response (email only when opted in)
+def save_consent_email(email: str, choice: str):
+    try:
+        file_path = "consent_responses.csv"
+        file_exists = os.path.exists(file_path)
+        with open(file_path, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["timestamp_utc", "email", "choice"])  # header
+            writer.writerow([datetime.utcnow().isoformat(), email, choice])
+    except Exception as e:
+        print(f"Error saving consent response: {e}")
 
 # Import our RAG modules
 from pptx_rag_quizzer.utils import parse_powerpoint
@@ -345,10 +360,11 @@ def main():
     
     st.title("♿ PowerPoint Accessibility Enhancer")
     st.markdown("Transform your PowerPoint into an accessible masterpiece with RAG-enhanced AI descriptions")
+    st.warning("AI-Generated Content: The following text is created by an AI model. It may contain errors, omissions, or outdated information. Please exercise caution and confirm details before use.")
     
     # Initialize session state
     if 'processing_stage' not in st.session_state:
-        st.session_state.processing_stage = 'upload'
+        st.session_state.processing_stage = 'consent'
     if 'presentation_model' not in st.session_state:
         st.session_state.presentation_model = None
     if 'rag_core' not in st.session_state:
@@ -361,6 +377,12 @@ def main():
         st.session_state.current_batch = 0
     if 'batch_size' not in st.session_state:
         st.session_state.batch_size = 5
+    if 'consent_completed' not in st.session_state:
+        st.session_state.consent_completed = False
+    if 'consent_choice' not in st.session_state:
+        st.session_state.consent_choice = None
+    if 'consent_email' not in st.session_state:
+        st.session_state.consent_email = ""
     
     # Check API key
     api_key = os.getenv("GOOGLE_API_KEY")
@@ -368,8 +390,70 @@ def main():
         st.error("❌ GOOGLE_API_KEY not found. Please set it in your .env file")
         st.stop()
     
+    # Consent Gate
+    if st.session_state.processing_stage == 'consent':
+        st.header("Consent to Participate")
+        st.markdown(
+            """
+            Dear Colleagues,
+
+            You are invited to participate in this research on “Enhancing Accessibility in Higher Education through Experiential Learning Opportunities” by participating a one-minute survey later (via email), or participating in one focus group discussion session, or one-on-one interview if you cannot make the focus group session, with an estimated total of 90 minutes. Confidentiality will be reminded at the beginning of the session.
+
+            If you choose to volunteer to participate in the study, what you share in the focus group or interview will be included in the research analysis. The data will be aggregated and no participants will be identified.
+
+            If you choose to opt out of the study, no further action is needed. There is no penalty if you choose not to participate.
+
+            You can simply check one of the following boxes to indicate your participation.
+            """
+        )
+
+        consent_options = [
+            "Yes – I agree to participate in this research project. I am 18 years of age or older.",
+            "No – I do not agree to participate in this research project. I am 18 years of age or older.",
+            "No - I am not eligible to participate as I am under the age of 18.",
+        ]
+        consent_choice = st.radio("Please select one option to continue:", consent_options, index=None)
+
+        email = ""
+        if consent_choice == consent_options[0]:
+            email = st.text_input("Email (for 1-minute survey)", value=st.session_state.consent_email, placeholder="name@domain.edu")
+
+        if st.button("Continue", type="primary", use_container_width=True):
+            if consent_choice is None:
+                st.error("Please select an option to continue.")
+            elif consent_choice == consent_options[0]:
+                if not email.strip():
+                    st.error("Please enter your email to continue.")
+                else:
+                    # Save and proceed
+                    st.session_state.consent_choice = 'yes'
+                    st.session_state.consent_email = email.strip()
+                    save_consent_email(st.session_state.consent_email, st.session_state.consent_choice)
+                    st.session_state.consent_completed = True
+                    st.session_state.processing_stage = 'upload'
+                    st.rerun()
+            elif consent_choice == consent_options[1]:
+                st.session_state.consent_choice = 'no'
+                st.session_state.consent_completed = True
+                st.session_state.processing_stage = 'upload'
+                st.rerun()
+            else:
+                st.session_state.consent_choice = 'under_18'
+                st.session_state.consent_completed = False
+                st.session_state.processing_stage = 'blocked'
+                st.rerun()
+
+    # Stage 0: Blocked (under 18)
+    elif st.session_state.processing_stage == 'blocked':
+        st.header("Access Restricted")
+        st.error("You are not eligible to participate as you are under the age of 18. Please close this page.")
+        st.stop()
+
     # Stage 1: File Upload and Initial Processing
-    if st.session_state.processing_stage == 'upload':
+    elif st.session_state.processing_stage == 'upload':
+        if not st.session_state.consent_completed:
+            st.session_state.processing_stage = 'consent'
+            st.rerun()
         st.header("📁 Step 1: Upload PowerPoint")
         
         uploaded_file = st.file_uploader(
