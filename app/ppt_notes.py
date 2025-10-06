@@ -408,8 +408,8 @@ def main():
         )
 
         consent_options = [
-            "Yes – I agree to participate in this research project. I am 18 years of age or older.",
-            "No – I do not agree to participate in this research project. I am 18 years of age or older.",
+            "Yes, I agree. I have provided my email address, and I confirm that I am 18 years of age or older.",
+            "No - I do not agree to participate in this research project. I am 18 years of age or older.",
             "No - I am not eligible to participate as I am under the age of 18.",
         ]
         consent_choice = st.radio("Please select one option to continue:", consent_options, index=None)
