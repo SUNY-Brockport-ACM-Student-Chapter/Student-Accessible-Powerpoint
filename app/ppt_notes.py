@@ -397,7 +397,7 @@ def main():
             """
             Dear Colleagues,
 
-            You are invited to participate in this research on “Enhancing Accessibility in Higher Education through Experiential Learning Opportunities” by participating a one-minute survey later (via email), or participating in one focus group discussion session, or one-on-one interview if you cannot make the focus group session, with an estimated total of 90 minutes. Confidentiality will be reminded at the beginning of the session.
+            You are invited to participate in this research on “Enhancing Accessibility in Higher Education through Experiential Learning Opportunities” by participating a one-minute survey later (via email), or participating in one focus group discussion session, or one-on-one interview if you cannot make the focus group session. Confidentiality will be reminded at the beginning of the session.
 
             If you choose to volunteer to participate in the study, what you share in the focus group or interview will be included in the research analysis. The data will be aggregated and no participants will be identified.
 
@@ -407,7 +407,9 @@ def main():
             """
         )
 
+
         consent_options = [
+            "Yes - I agree to participate in this research project. I am 18 years of age or older.",
             "Yes, I agree. I have provided my email address, and I confirm that I am 18 years of age or older.",
             "No - I do not agree to participate in this research project. I am 18 years of age or older.",
             "No - I am not eligible to participate as I am under the age of 18.",
@@ -432,7 +434,7 @@ def main():
                     st.session_state.consent_completed = True
                     st.session_state.processing_stage = 'upload'
                     st.rerun()
-            elif consent_choice == consent_options[1]:
+            elif consent_choice == consent_options[2] or consent_choice == consent_options[1]:
                 st.session_state.consent_choice = 'no'
                 st.session_state.consent_completed = True
                 st.session_state.processing_stage = 'upload'
