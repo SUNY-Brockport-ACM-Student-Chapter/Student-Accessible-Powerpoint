@@ -314,10 +314,6 @@ def generate_accessible_notes(items, slide_number, rag_core=None):
     Returns:
         str: Accessible grade notes for the slide
     """
-    import time as time_module
-    start_time = time_module.time()
-    print(f"⏱️ [Slide {slide_number}] Starting notes generation...")
-    
     # Reuse RAGCore instance if provided, otherwise create new one
     if rag_core is None:
         from pptx_rag_quizzer.rag_core import RAGCore
@@ -357,9 +353,7 @@ Requirements:
     
     try:
         # Generate accessible notes using Gemini
-        ai_start = time_module.time()
         accessible_notes = rag_core.prompt_gemini(prompt, max_output_tokens=400)
-        ai_time = time_module.time() - ai_start
         
         # Clean up conversational preambles that might slip through
         accessible_notes = accessible_notes.strip()
@@ -383,12 +377,9 @@ Requirements:
                         accessible_notes = parts[1].strip()
                 break
         
-        total_time = time_module.time() - start_time
-        print(f"✅ [Slide {slide_number}] Notes generated in {total_time:.2f}s (AI: {ai_time:.2f}s)")
         return accessible_notes
     except Exception as e:
-        total_time = time_module.time() - start_time
-        print(f"❌ [Slide {slide_number}] Error after {total_time:.2f}s: {e}")
+        print(f"❌ [Slide {slide_number}] Error generating notes: {e}")
         print(f"Traceback: {traceback.format_exc()}")
         # Fallback to basic notes if AI generation fails
         fallback_notes = f"""Slide {slide_number} Notes:
@@ -405,24 +396,12 @@ def rebuild_presentation_with_accessible_features(presentation_model, powerpoint
     whole slide in detail. and all the images in the presentation model have a description that 
     explains the image in detail so we will add that to the alt text portion of the shapes.
     """
-    import time as time_module
     from pptx_rag_quizzer.rag_core import RAGCore
     
-    overall_start = time_module.time()
-    print(f"\n{'='*60}")
-    print(f"🚀 Starting presentation rebuild with accessibility features")
-    print(f"{'='*60}\n")
-    
-    load_start = time_module.time()
     prs = pptx_lib(powerpoint_file)
-    load_time = time_module.time() - load_start
-    print(f"📂 Loaded PowerPoint in {load_time:.2f}s")
     
     # Initialize RAGCore once and reuse for all slides (major performance improvement)
-    init_start = time_module.time()
     rag_core = RAGCore()
-    init_time = time_module.time() - init_start
-    print(f"🤖 Initialized AI model in {init_time:.2f}s")
 
     def update_images_with_alt_text(shapes, slide_idx, order_number, alt_text_items):
         """Recursively update images with alt text from the presentation model."""
@@ -565,15 +544,7 @@ def rebuild_presentation_with_accessible_features(presentation_model, powerpoint
 
         return current_order
 
-
-
-    total_slides = len(prs.slides)
-    print(f"\n📊 Processing {total_slides} slides...\n")
-    
     for slide_idx, slide in enumerate(prs.slides):
-        slide_start = time_module.time()
-        print(f"--- Slide {slide_idx + 1}/{total_slides} ---")
-        
         processed_slide_items: List[Union[Image, Text]] = []
 
         processed_slide_items = [item for item in presentation_model.slides[slide_idx].items]
@@ -582,7 +553,6 @@ def rebuild_presentation_with_accessible_features(presentation_model, powerpoint
         notes = generate_accessible_notes(processed_slide_items, slide_idx + 1, rag_core) 
 
         # Update the slide notes with the generated notes
-        notes_start = time_module.time()
         try:
             # Ensure the notes slide exists (accessing notes_slide creates it if needed)
             notes_slide = slide.notes_slide
@@ -590,8 +560,6 @@ def rebuild_presentation_with_accessible_features(presentation_model, powerpoint
             # Ensure the notes text frame exists
             if notes_slide.notes_text_frame:
                 notes_slide.notes_text_frame.text = notes
-                notes_time = time_module.time() - notes_start
-                print(f"📝 [Slide {slide_idx + 1}] Notes set in {notes_time:.2f}s")
             else:
                 print(f"⚠️  [Slide {slide_idx + 1}] No notes text frame")
         except Exception as e:
@@ -601,19 +569,6 @@ def rebuild_presentation_with_accessible_features(presentation_model, powerpoint
         alt_text_images = [item for item in processed_slide_items if item.type == Type.image]
 
         # Update images with alt text, starting from order_number 0
-        alt_start = time_module.time()
         update_images_with_alt_text(slide.shapes, slide_idx, 0, alt_text_images)
-        alt_time = time_module.time() - alt_start
-        print(f"🖼️  [Slide {slide_idx + 1}] Alt text updated for {len(alt_text_images)} images in {alt_time:.2f}s")
-        
-        slide_time = time_module.time() - slide_start
-        print(f"✅ [Slide {slide_idx + 1}] Complete in {slide_time:.2f}s\n")
-
-    overall_time = time_module.time() - overall_start
-    print(f"\n{'='*60}")
-    print(f"🎉 Presentation rebuild complete!")
-    print(f"⏱️  Total time: {overall_time:.2f}s ({overall_time/60:.1f} minutes)")
-    print(f"📊 Average per slide: {overall_time/total_slides:.2f}s")
-    print(f"{'='*60}\n")
     
     return prs
