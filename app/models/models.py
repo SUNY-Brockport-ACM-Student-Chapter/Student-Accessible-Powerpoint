@@ -1,6 +1,8 @@
 import pydantic
 from enum import Enum
 from typing import List, Union
+from pydantic import field_serializer
+import base64
 
 class Type(Enum):
     image = "image"
@@ -16,6 +18,10 @@ class SlideItem(pydantic.BaseModel):
 class Image(SlideItem):
     image_bytes: bytes
     extension: str
+
+    @field_serializer('image_bytes')
+    def serialize_image_bytes(self, value: bytes, _info) -> str:
+        return base64.b64encode(value).decode('utf-8')
 
     def metadata(self):
         return {

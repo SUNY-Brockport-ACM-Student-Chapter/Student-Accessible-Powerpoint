@@ -7,47 +7,23 @@ import io
 import uuid
 import csv
 from datetime import datetime
+from dotenv import load_dotenv
+
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
-from dotenv import load_dotenv
 
-# Import Wand for WMF support
-try:
-    from wand.image import Image as WandImage
-    WAND_AVAILABLE = True
-except ImportError:
-    WAND_AVAILABLE = False
+# Project imports
+from pptx_rag_quizzer.utils import parse_powerpoint, rebuild_presentation_with_accessible_features
+from pptx_rag_quizzer.rag_core import RAGCore
+from pptx_rag_quizzer.image import Image as ImageProcessor
+from models.models import Presentation as PresentationModel
 
-def safe_open_image(img_bytes: bytes):
-    """Safely load images including WMF formats that Pillow cannot handle.
-    
-    Args:
-        img_bytes: Image data as bytes
-        
-    Returns:
-        PIL Image object (converted to PNG if WMF detected)
-        
-    Raises:
-        RuntimeError: If WMF images cannot be processed and Wand is not available
-    """
-    # Always try to open with Pillow first
-    try:
-        img = Image.open(io.BytesIO(img_bytes))
-        if img.format and img.format.lower() == "wmf":
-            raise OSError("Force WMF fallback")
-        return img
-    except (OSError, UnidentifiedImageError):
-        if not WAND_AVAILABLE:
-            raise RuntimeError("Wand (ImageMagick) is required to handle WMF/EMF images. "
-                               "Install with `pip install Wand` and ensure ImageMagick is installed.")
-        # Convert WMF → PNG in memory
-        with WandImage(blob=img_bytes, format="wmf") as wmf:
-            png_bytes = wmf.make_blob("png")
-        return Image.open(io.BytesIO(png_bytes))
+# Load environment variables
+load_dotenv()
 
 # Save consent response (email only when opted in)
 def save_consent_email(email: str, choice: str):
@@ -62,293 +38,20 @@ def save_consent_email(email: str, choice: str):
     except Exception as e:
         print(f"Error saving consent response: {e}")
 
-# Import our RAG modules
-from pptx_rag_quizzer.utils import parse_powerpoint
-from pptx_rag_quizzer.rag_core import RAGCore
-from pptx_rag_quizzer.image import Image as ImageProcessor
-from models.models import Presentation as PresentationModel
-
-# Load environment variables
-load_dotenv()
-
-# Configure API key
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-# Choose a Gemini model.
-model = genai.GenerativeModel(model_name="gemini-2.0-flash-lite")
-
-def ExtractText_LLM(image_base64: str, image_format: str = 'png', max_retries=3, delay=1, quota_refill_delay=60):
-    generation_config = GenerationConfig(max_output_tokens=150)
-
-    for attempt in range(max_retries):
-        try:
-            image_part = {
-                'inline_data': {
-                    'mime_type': f'image/{image_format}',
-                    'data': image_base64
-                }
-            }
-
-            result = model.generate_content(
-                contents=[
-                    image_part,
-                    "\n",
-                    "Analyze this image and provide a comprehensive description suitable for accessibility. "
-                    "Include: main subject, key elements, context, and purpose. "
-                    "Be descriptive but concise (under 125 characters for alt text). "
-                    "Focus on what someone who can't see the image would need to know."
-                ],
-                generation_config=generation_config,
-                request_options={"timeout": 10}
-            )
-
-            return result.text.strip()
-
-        except Exception as e:
-            if "Resource has been exhausted" in str(e):
-                print(f"Quota exhausted, waiting {quota_refill_delay} seconds for refill...")
-                time.sleep(quota_refill_delay)
-            else:
-                print(f"Attempt {attempt + 1} failed: {str(e)}")
-                if attempt < max_retries - 1:
-                    time.sleep(delay)
-                else:
-                    raise
-
-def create_accessible_alt_text(ai_description, slide_number, image_number, context=""):
-    """Create optimized alt text following accessibility best practices"""
-    
-    # Clean and truncate the AI description
-    clean_desc = ai_description.strip()
-    
-    # If description is too long, create a shorter version
-    if len(clean_desc) > 125:
-        # Try to keep the most important parts
-        words = clean_desc.split()
-        short_desc = ""
-        for word in words:
-            if len(short_desc + " " + word) <= 120:
-                short_desc += " " + word if short_desc else word
-            else:
-                break
-        clean_desc = short_desc + "..."
-    
-    # Add context if provided
-    if context:
-        alt_text = f"{clean_desc} - {context}"
-    else:
-        alt_text = f"{clean_desc} - Image {image_number} on slide {slide_number}"
-    
-    # Ensure it's not too long
-    if len(alt_text) > 125:
-        alt_text = alt_text[:122] + "..."
-    
-    return alt_text
 
 def parse_powerpoint_file(file_bytes, file_name):
     """Parse PowerPoint file into our model format"""
     file_object = io.BytesIO(file_bytes)
     return parse_powerpoint(file_object, file_name)
 
-def process_powerpoint_with_rag_enhanced(pptx_path, output_path, presentation_model, collection_id, image_descriptions):
-    """Process PowerPoint with RAG-enhanced accessibility features"""
-    prs = Presentation(pptx_path)
+def process_powerpoint_with_rag_enhanced(pptx_model, enhanced_collection_id, file_bytes):
+    """Process PowerPoint with RAG-enhanced accessibility features using the new rebuild method"""
     
-    # Initialize RAG core and image processor
-    rag_core = RAGCore()
-    image_processor = ImageProcessor(rag_core)
+    file_object = io.BytesIO(file_bytes)
+    # Rebuild presentation with accessible features
+    prs = rebuild_presentation_with_accessible_features(pptx_model, file_object)
     
-    total_images = 0
-    processed_images = 0
-    total_shapes = 0
-    processed_shapes = 0
-
-    for slide_index, slide in enumerate(prs.slides):
-        slide_model = presentation_model.slides[slide_index] if slide_index < len(presentation_model.slides) else None
-        
-        notes_texts = []
-        image_counter = 1
-        slide_title = f"Slide {slide_index + 1}"
-        
-        # Try to get actual slide title from the model
-        if slide_model:
-            for item in slide_model.items:
-                if item.type.value == 'text' and item.content.strip():
-                    if not slide_title or slide_title == f"Slide {slide_index + 1}":
-                        slide_title = item.content.strip()[:50]  # Limit title length
-                        break
-        
-        notes_texts.append(f"=== {slide_title} ===\n")
-        
-        # Process all shapes for accessibility
-        for shape_index, shape in enumerate(slide.shapes):
-            total_shapes += 1
-            
-            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                total_images += 1
-                try:
-                    image = shape.image
-                    image_bytes = image.blob
-
-                    # Get image description from our enhanced processing
-                    image_description = None
-                    if slide_model:
-                        for item in slide_model.items:
-                            if item.type.value == 'image' and hasattr(item, 'image_bytes'):
-                                # Compare image bytes to find matching description
-                                if item.image_bytes == image_bytes:
-                                    image_description = item.content
-                                    break
-                    
-                    if not image_description or image_description.lower() in ['none', 'null', '']:
-                        # Fallback to basic description
-                        image_description = "Image content - detailed description not available"
-                    
-                    # Use the image caption/description directly for alt text
-                    alt_text = (image_description or "").strip()
-                    if not alt_text:
-                        alt_text = f"Image {image_counter} on slide {slide_index + 1}"
-                    
-
-                    # Set native PPTX alt text via underlying cNvPr descr attribute
-                    try:
-                        shape._element._nvXxPr.cNvPr.attrib["descr"] = alt_text
-                    except Exception:
-                        # Fallback to python-pptx property if needed
-                        try:
-                            shape.alternative_text = alt_text
-                        except Exception:
-                            pass
-                    
-                    # Add to notes with detailed information
-                    note_text = (
-                        f"🖼️ Image {image_counter}:\n"
-                        f"📝 AI Analysis: {image_description}\n"
-                        f"♿ Alt Text: {alt_text}\n"
-                        f"📍 Position: Shape {shape_index + 1}\n"
-                    )
-                    notes_texts.append(note_text)
-                    image_counter += 1
-                    processed_images += 1
-                    processed_shapes += 1
-                    
-                except Exception as e:
-                    st.warning(f"Could not process image on slide {slide_index + 1}: {str(e)}")
-                    # Add fallback alt text
-                    fallback_alt = f"Image on slide {slide_index + 1} - Unable to process"
-                    try:
-                        shape._element._nvXxPr.cNvPr.attrib["descr"] = fallback_alt
-                    except Exception:
-                        try:
-                            shape.alternative_text = fallback_alt
-                        except Exception:
-                            pass
-                    notes_texts.append(f"⚠️ Image {image_counter}: Processing failed - {str(e)}\n")
-                    image_counter += 1
-            
-            elif hasattr(shape, 'text') and shape.text.strip():
-                # Add text content to notes for context
-                text_content = shape.text.strip()
-                if len(text_content) > 100:
-                    text_content = text_content[:97] + "..."
-                
-                notes_texts.append(f"📝 Text Content: {text_content}\n")
-                processed_shapes += 1
-            
-            elif shape.shape_type == MSO_SHAPE_TYPE.CHART:
-                # Handle charts
-                chart_alt = f"Chart on slide {slide_index + 1} - {slide_title}"
-                shape.alternative_text = chart_alt
-                notes_texts.append(f"📊 Chart: {chart_alt}\n")
-                processed_shapes += 1
-            
-            elif shape.shape_type == MSO_SHAPE_TYPE.TABLE:
-                # Handle tables
-                table_alt = f"Table on slide {slide_index + 1} - {slide_title}"
-                shape.alternative_text = table_alt
-                notes_texts.append(f"📋 Table: {table_alt}\n")
-                processed_shapes += 1
-
-        # Enhanced notes generation with RAG context
-        try:
-            if collection_id:
-                # Get context from RAG for this slide
-                try:
-                    slide_context = rag_core.get_context_from_slide_number(slide_index + 1, collection_id)
-                    context_docs = slide_context.get("documents", "")
-                    
-                    if context_docs:
-                        # Generate enhanced notes with context
-                        enhanced_notes = generate_enhanced_notes_with_context(
-                            slide_title, notes_texts, context_docs, rag_core
-                        )
-                        notes_texts = enhanced_notes
-                        
-                except Exception as e:
-                    print(f"Could not retrieve context for slide {slide_index + 1}: {e}")
-                    # Continue with basic notes
-            
-            # Add or update notes
-            if not slide.has_notes_slide:
-                notes_slide = slide.notes_slide
-            else:
-                notes_slide = slide.notes_slide
-            
-            if not notes_slide.notes_text_frame:
-                continue
-            
-            notes_frame = notes_slide.notes_text_frame
-            notes_frame.text = "\n".join(notes_texts) if notes_texts else "No content found on this slide."
-            
-        except Exception as e:
-            print(f"Could not add notes to slide {slide_index + 1}: {str(e)}")
-            continue
-
-    # Save the processed presentation
-    prs.save(output_path)
-    
-    return total_images, processed_images, total_shapes, processed_shapes
-
-def generate_enhanced_notes_with_context(slide_title, basic_notes, context_docs, rag_core):
-    """Generate enhanced notes using RAG context"""
-    try:
-        context_str = context_docs if isinstance(context_docs, str) else " ".join(context_docs)
-        basic_notes_str = "\n".join(basic_notes)
-        
-        prompt = f"""
-        You are an accessibility expert creating comprehensive slide notes for students.
-        
-        Slide Title: {slide_title}
-        
-        Basic Content:
-        {basic_notes_str}
-        
-        Additional Context from Presentation:
-        {context_str}
-        
-        Create enhanced, comprehensive accessibility notes that:
-        1. Summarize the slide's main points clearly
-        2. Explain any complex concepts in simple terms
-        3. Provide context for images and visual elements
-        4. Include key takeaways for students
-        5. Maintain a helpful, educational tone
-        
-        Format the response as structured notes suitable for student accessibility.
-        """
-        
-        enhanced_notes = rag_core.prompt_gemini(prompt, max_output_tokens=500)
-        
-        # Return enhanced notes with original structure
-        enhanced_notes_list = [f"=== {slide_title} ===", ""]
-        enhanced_notes_list.extend(enhanced_notes.split('\n'))
-        enhanced_notes_list.extend(["", "---", ""])
-        enhanced_notes_list.extend(basic_notes)
-        
-        return enhanced_notes_list
-        
-    except Exception as e:
-        print(f"Error generating enhanced notes: {e}")
-        return basic_notes
-
+    return prs
 
 
 def main():
@@ -383,12 +86,8 @@ def main():
         st.session_state.consent_choice = None
     if 'consent_email' not in st.session_state:
         st.session_state.consent_email = ""
-    
-    # Check API key
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        st.error("❌ GOOGLE_API_KEY not found. Please set it in your .env file")
-        st.stop()
+    if 'new_presentation_model' not in st.session_state:
+        st.session_state.new_presentation_model = None
     
     # Consent Gate
     if st.session_state.processing_stage == 'consent':
@@ -459,7 +158,7 @@ def main():
         st.header("📁 Step 1: Upload PowerPoint")
         
         uploaded_file = st.file_uploader(
-            "Choose a PowerPoint file",
+            "Choose a PowerPoint file (Note: The uploaded file is not collected, and any temporary cache will be cleared automatically when the app is closed.",
             type=['pptx'],
             help="Upload a .pptx file to enhance accessibility"
         )
@@ -495,7 +194,7 @@ def main():
                         st.exception(e)
 
             if st.button("⚡ Quick Generate & Download (Skip Review)", use_container_width=True):
-                with st.spinner("Generating accessible PowerPoint (skipping review)..."):
+                with st.spinner("Generating accessible PowerPoint (skipping review) This may take a few minutes depending on the size of the presentation..."):
                     try:
                         # Parse the PowerPoint file
                         file_bytes = uploaded_file.read()
@@ -530,25 +229,18 @@ def main():
                                             item.content = f"Error describing image: {e}"
 
                         # Rebuild collection including image descriptions
-                        rag_core.remove_collection(collection_id)
+                        response = rag_core.remove_collection(collection_id)
+                        if not response.get("success", False):
+                            st.error(f"❌ Error removing collection: {response.get('message', 'Unknown error')}")
+                            st.stop()
                         enhanced_collection_id = rag_core.create_collection(presentation_model)
 
-                        # Save temporary file for processing
-                        temp_path = f"temp_{uploaded_file.name}"
-                        with open(temp_path, "wb") as f:
-                            f.write(file_bytes)
-
                         # Process with enhanced RAG and write accessibility features
-                        output_path = f"accessible_{uploaded_file.name}"
-                        process_powerpoint_with_rag_enhanced(
-                            temp_path, output_path, presentation_model, enhanced_collection_id, {}
-                        )
-
-                        # Clean up temp file
-                        os.remove(temp_path)
+                        prs = process_powerpoint_with_rag_enhanced(presentation_model, enhanced_collection_id, file_bytes)
 
                         # Jump straight to download stage
-                        st.session_state.output_path = output_path
+                        st.session_state.new_presentation_model = prs
+                        st.session_state.uploaded_file_name = uploaded_file.name
                         st.session_state.processing_stage = 'download'
                         st.rerun()
 
@@ -642,7 +334,8 @@ def main():
                 st.write(f"**Image {batch_start + i + 1}** (Slide {img_item.slide_number})")
                 
                 # Display image
-                img = safe_open_image(img_item.image_bytes)
+                #img = safe_open_image(img_item.image_bytes)
+                img = Image.open(io.BytesIO(img_item.image_bytes))
                 st.image(img, width=400, caption=f"Slide {img_item.slide_number} - Image {batch_start + i + 1}")
                 
                 # Editable description
@@ -689,7 +382,7 @@ def main():
             st.rerun()
         
         if st.button("🚀 Generate Enhanced Accessibility Features", type="primary", use_container_width=True):
-            with st.spinner("Building enhanced RAG collection and generating accessibility features..."):
+            with st.spinner("Generating accessibility features... This may take a few minutes depending on the size of the presentation..."):
                 try:
                     presentation_model = st.session_state.presentation_model
                     rag_core = st.session_state.rag_core
@@ -698,25 +391,18 @@ def main():
                     file_name = st.session_state.uploaded_file_name
                     
                     # Remove old collection and create new one with image descriptions
-                    rag_core.remove_collection(collection_id)
+                    response = rag_core.remove_collection(collection_id)
+                    if not response.get("success", False):
+                        st.error(f"❌ Error removing collection: {response.get('message', 'Unknown error')}")
+                        st.stop()
                     enhanced_collection_id = rag_core.create_collection(presentation_model)
                     
-                    # Save temporary file for processing
-                    temp_path = f"temp_{file_name}"
-                    with open(temp_path, "wb") as f:
-                        f.write(file_bytes)
-                    
                     # Process with enhanced RAG
-                    output_path = f"accessible_{file_name}"
-                    total_images, processed_images, total_shapes, processed_shapes = process_powerpoint_with_rag_enhanced(
-                        temp_path, output_path, presentation_model, enhanced_collection_id, {}
-                    )
-                    
-                    # Clean up temp file
-                    os.remove(temp_path)
+                    prs = process_powerpoint_with_rag_enhanced(presentation_model, enhanced_collection_id, file_bytes)
+                    st.session_state.new_presentation_model = prs
                     
                     # Store output path for download
-                    st.session_state.output_path = output_path
+                    st.session_state.uploaded_file_name = file_name
                     st.session_state.processing_stage = 'download'
                     st.rerun()
                     
@@ -726,9 +412,14 @@ def main():
     
     # Stage 4: Download
     elif st.session_state.processing_stage == 'download':
-        st.header("✅ Accessibility Enhancement Complete!")
+        prs = st.session_state.new_presentation_model
+        file_name = st.session_state.uploaded_file_name
+        output_path = f"accessible_{file_name}"
         
-        output_path = st.session_state.output_path
+        # Save the presentation to a file
+        prs.save(output_path)
+        
+        st.header("✅ Accessibility Enhancement Complete!")
         
         # Show results
         col1, col2 = st.columns(2)

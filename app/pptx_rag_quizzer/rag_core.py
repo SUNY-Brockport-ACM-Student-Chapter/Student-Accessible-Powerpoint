@@ -9,7 +9,6 @@ import io
 import time
 from PIL import Image as PILImage
 import requests
-import json
 
 load_dotenv()
 
@@ -236,7 +235,13 @@ class RAGCore:
 
         return retrieved_results
     
-
+    def remove_collection(self, collection_id: str):
+        """
+        This function is used to remove a collection.
+        """
+        # Use HTTP API client (no ChromaDB dependencies)
+        response = self.chroma_api.delete_collection(collection_id)
+        return response  # Already a dict from delete_collection
     
     def get_random_slide_context(self, collection_id: str):
         """
@@ -411,8 +416,20 @@ class RAGCore:
             # Open and validate the image
             img = PILImage.open(io.BytesIO(image_bytes))
 
-            # Convert to RGB if necessary (some formats like PNG with transparency cause issues)
-            if img.mode in ("RGBA", "LA", "P"):
+            # Convert palette images with transparency to RGBA first, then to RGB
+            if img.mode == "P" and "transparency" in img.info:
+                img = img.convert("RGBA")
+            
+            # Convert to RGB if necessary (Gemini works best with RGB)
+            if img.mode in ("RGBA", "LA"):
+                # Create white background for transparency
+                background = PILImage.new("RGB", img.size, (255, 255, 255))
+                if img.mode == "RGBA":
+                    background.paste(img, mask=img.split()[3])  # Use alpha channel as mask
+                else:
+                    background.paste(img, mask=img.split()[1])  # Use alpha channel as mask
+                img = background
+            elif img.mode == "P":
                 img = img.convert("RGB")
 
             # Save as PNG to ensure compatibility
