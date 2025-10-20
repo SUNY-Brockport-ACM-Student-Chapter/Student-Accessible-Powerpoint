@@ -22,8 +22,39 @@ from pptx_rag_quizzer.rag_core import RAGCore
 from pptx_rag_quizzer.image import Image as ImageProcessor
 from models.models import Presentation as PresentationModel
 
+from wand.image import Image as WandImage
+
+WAND_AVAILABLE = True
 # Load environment variables
 load_dotenv()
+
+
+def safe_open_image(img_bytes: bytes):
+    """Safely load images including WMF formats that Pillow cannot handle.
+    
+    Args:
+        img_bytes: Image data as bytes
+        
+    Returns:
+        PIL Image object (converted to PNG if WMF detected)
+        
+    Raises:
+        RuntimeError: If WMF images cannot be processed and Wand is not available
+    """
+    # Always try to open with Pillow first
+    try:
+        img = Image.open(io.BytesIO(img_bytes))
+        if img.format and img.format.lower() == "wmf":
+            raise OSError("Force WMF fallback")
+        return img
+    except (OSError, UnidentifiedImageError):
+        if not WAND_AVAILABLE:
+            raise RuntimeError("Wand (ImageMagick) is required to handle WMF/EMF images. "
+                               "Install with `pip install Wand` and ensure ImageMagick is installed.")
+        # Convert WMF → PNG in memory
+        with WandImage(blob=img_bytes, format="wmf") as wmf:
+            png_bytes = wmf.make_blob("png")
+        return Image.open(io.BytesIO(png_bytes))
 
 # Save consent response (email only when opted in)
 def save_consent_email(email: str, choice: str):
@@ -334,8 +365,11 @@ def main():
                 st.write(f"**Image {batch_start + i + 1}** (Slide {img_item.slide_number})")
                 
                 # Display image
-                #img = safe_open_image(img_item.image_bytes)
-                img = Image.open(io.BytesIO(img_item.image_bytes))
+                try:
+                    img = safe_open_image(img_item.image_bytes)
+                except Exception as e:
+                    st.error(f"Error displaying image: This will not affect the accessibility features generation. Error: {e}")
+                    continue
                 st.image(img, width=400, caption=f"Slide {img_item.slide_number} - Image {batch_start + i + 1}")
                 
                 # Editable description
