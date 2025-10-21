@@ -71,7 +71,7 @@ def convert_image_to_png_or_jpg(image_bytes, extension):
         extension (str): Original file extension (e.g., 'png', 'jpg', 'svg', ...)
 
     Returns:
-        (bytes, str): Tuple of (converted_bytes, new_extension)
+        (bytes, str) or (None, None): Tuple of (converted_bytes, new_extension), or (None, None) if conversion fails for WMF/EMF
     """
     # Normalize extension
     ext = (extension or "").lower().lstrip(".")
@@ -85,8 +85,11 @@ def convert_image_to_png_or_jpg(image_bytes, extension):
     # Prefer PNG as the unified output
     magick = shutil.which("magick") or shutil.which("convert")
     if not magick:
-        # ImageMagick not available; return original
-        return image_bytes, ("jpg" if ext in ("jpg", "jpeg") else (ext or "png"))
+        # ImageMagick not available; skip problematic formats
+        if ext in ("wmf", "emf"):
+            print(f"❌ WARNING: ImageMagick not found, cannot convert {ext.upper()} image. Skipping...")
+            return None, None
+        return image_bytes, (ext or "png")
 
     # Higher density for vector-like formats to improve rasterization quality
     vector_like_exts = {"svg", "pdf", "eps", "ai", "emf", "wmf"}
@@ -106,9 +109,34 @@ def convert_image_to_png_or_jpg(image_bytes, extension):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        
+        # Verify output is valid
+        if len(proc.stdout) == 0:
+            raise Exception(f"ImageMagick returned empty output for {ext}")
+            
         return proc.stdout, "png"
-    except Exception:
-        # If conversion fails for any reason, fall back to original
+        
+    except subprocess.CalledProcessError as e:
+        # Log the actual error for debugging
+        stderr_output = e.stderr.decode('utf-8', errors='ignore') if e.stderr else 'N/A'
+        print(f"❌ ERROR: ImageMagick conversion failed for {ext.upper()}")
+        print(f"   Command: {' '.join(cmd)}")
+        print(f"   Return code: {e.returncode}")
+        print(f"   stderr: {stderr_output[:300]}")  # First 300 chars
+        
+        # For formats that REQUIRE conversion (WMF, EMF), skip the image
+        if ext in ("wmf", "emf"):
+            print(f"   → Skipping {ext.upper()} image (cannot be used without conversion)")
+            return None, None
+        
+        # For other formats, try to return original (risky but might work)
+        print(f"   → Falling back to original {ext} bytes")
+        return image_bytes, (ext or "png")
+    except Exception as e:
+        print(f"❌ ERROR: Unexpected error converting {ext.upper()}: {str(e)}")
+        if ext in ("wmf", "emf"):
+            print(f"   → Skipping {ext.upper()} image")
+            return None, None
         return image_bytes, (ext or "png")
 
 def parse_powerpoint(file_object, file_name):
@@ -148,16 +176,20 @@ def parse_powerpoint(file_object, file_name):
                     blob = shape.image.blob
                     if blob:
                         converted_bytes, converted_ext = convert_image_to_png_or_jpg(blob, getattr(shape.image, "ext", None))
-                        items.append(Image(
-                            id=str(uuid.uuid4()),
-                            content='none',
-                            extension=converted_ext,
-                            image_bytes=converted_bytes,  # Keep as bytes, model will serialize to base64
-                            slide_number=slide_idx + 1,
-                            type=Type.image,
-                            order_number=order_number,
-                        ))
-                        order_number += 1
+                        # Skip if conversion returned None (failed WMF/EMF)
+                        if converted_bytes is not None:
+                            items.append(Image(
+                                id=str(uuid.uuid4()),
+                                content='none',
+                                extension=converted_ext,
+                                image_bytes=converted_bytes,  # Keep as bytes, model will serialize to base64
+                                slide_number=slide_idx + 1,
+                                type=Type.image,
+                                order_number=order_number,
+                            ))
+                            order_number += 1
+                        else:
+                            print(f"⚠️  Skipped unsupported image format ({getattr(shape.image, 'ext', 'unknown')}) on slide {slide_idx + 1}")
 
                 elif shape.shape_type == MSO_SHAPE_TYPE.GROUP:
                     group_items = extract_shapes_recursive(shape.shapes, slide_idx, order_number)
@@ -169,16 +201,20 @@ def parse_powerpoint(file_object, file_name):
                         blob = shape.image.blob
                         if blob:
                             converted_bytes, converted_ext = convert_image_to_png_or_jpg(blob, getattr(shape.image, "ext", None))
-                            items.append(Image(
-                                id=str(uuid.uuid4()),
-                                content='none',
-                                extension=converted_ext,
-                                image_bytes=converted_bytes,  # Keep as bytes, model will serialize to base64
-                                slide_number=slide_idx + 1,
-                                type=Type.image,
-                                order_number=order_number,
-                            ))
-                            order_number += 1
+                            # Skip if conversion returned None (failed WMF/EMF)
+                            if converted_bytes is not None:
+                                items.append(Image(
+                                    id=str(uuid.uuid4()),
+                                    content='none',
+                                    extension=converted_ext,
+                                    image_bytes=converted_bytes,  # Keep as bytes, model will serialize to base64
+                                    slide_number=slide_idx + 1,
+                                    type=Type.image,
+                                    order_number=order_number,
+                                ))
+                                order_number += 1
+                            else:
+                                print(f"⚠️  Skipped unsupported diagram/chart image format on slide {slide_idx + 1}")
 
                 elif hasattr(shape, "background") and hasattr(shape.background, "fill"):
                     fill = shape.background.fill
@@ -186,16 +222,20 @@ def parse_powerpoint(file_object, file_name):
                         blob = fill.background.blob
                         if blob:
                             converted_bytes, converted_ext = convert_image_to_png_or_jpg(blob, None)
-                            items.append(Image(
-                                id=str(uuid.uuid4()),
-                                content='none',
-                                extension=converted_ext,
-                                image_bytes=converted_bytes,  # Keep as bytes, model will serialize to base64
-                                slide_number=slide_idx + 1,
-                                type=Type.image,
-                                order_number=order_number,
-                            ))
-                            order_number += 1
+                            # Skip if conversion returned None (failed WMF/EMF)
+                            if converted_bytes is not None:
+                                items.append(Image(
+                                    id=str(uuid.uuid4()),
+                                    content='none',
+                                    extension=converted_ext,
+                                    image_bytes=converted_bytes,  # Keep as bytes, model will serialize to base64
+                                    slide_number=slide_idx + 1,
+                                    type=Type.image,
+                                    order_number=order_number,
+                                ))
+                                order_number += 1
+                            else:
+                                print(f"⚠️  Skipped unsupported background image format on slide {slide_idx + 1}")
 
             except Exception as e:
                 # Provide richer debug information to help diagnose problematic shapes
