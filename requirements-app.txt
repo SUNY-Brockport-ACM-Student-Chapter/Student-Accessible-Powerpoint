@@ -9,6 +9,7 @@ python-dotenv>=1.1.1
 pydantic>=2.11.9
 requests>=2.32.5
 pytesseract>=0.3.13
+python-docx>=1.1.0
 
 # Optional: WMF/EMF image support via ImageMagick (install ImageMagick separately)
 Wand>=0.6.13

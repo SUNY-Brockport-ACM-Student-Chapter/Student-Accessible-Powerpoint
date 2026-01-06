@@ -1,23 +1,15 @@
 
 import streamlit as st
 import os
-import time
-import base64
 import io
-import uuid
 import csv
 from datetime import datetime
 from dotenv import load_dotenv
+from PIL import Image
 
-from pptx import Presentation
-from pptx.enum.shapes import MSO_SHAPE_TYPE
-from PIL import Image, UnidentifiedImageError
-from io import BytesIO
-import google.generativeai as genai
-from google.generativeai.types import GenerationConfig
 
 # Project imports
-from pptx_rag_quizzer.utils import parse_powerpoint, rebuild_presentation_with_accessible_features
+from pptx_rag_quizzer.pptx import parse_powerpoint, rebuild_presentation_with_accessible_features
 from pptx_rag_quizzer.rag_core import RAGCore
 from pptx_rag_quizzer.image import Image as ImageProcessor
 from models.models import Presentation as PresentationModel
