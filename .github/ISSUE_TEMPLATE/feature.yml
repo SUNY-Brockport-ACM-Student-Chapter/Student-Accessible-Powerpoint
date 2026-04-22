@@ -1,0 +1,78 @@
+name: Feature request
+description: Propose a new capability. Full spec is in docs/templates/FEATURE.md.
+title: "[feat] "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the proposal. The full agent-optimized template lives at
+        [`docs/templates/FEATURE.md`](../../docs/templates/FEATURE.md) — copy and paste it into the
+        description once this issue is created if you want a reviewer to pick it up.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary (<= 3 sentences)
+      description: What does the user gain when this ships?
+      placeholder: "Users can upload .docx files alongside .pptx and get the same accessibility treatment."
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Who asked for this, why now, what evidence?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: branch
+    attributes:
+      label: Likely target branch
+      options:
+        - "main (canonical)"
+        - "Aggrement (production)"
+        - "Prod-v1 (Docker)"
+        - "nextjs-impl (experimental)"
+        - "unsure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope - in / out
+      description: Bullets for "in scope" and "out of scope". Be strict about out-of-scope.
+    validations:
+      required: true
+
+  - type: textarea
+    id: invariants
+    attributes:
+      label: Which invariants does this touch?
+      description: |
+        List any of the invariants from
+        [`docs/guardrails/INVARIANTS.md`](../../docs/guardrails/INVARIANTS.md) that this change
+        intersects (e.g. #1 order_number, #2 cNvPr/descr, #3 Gemini backoff, #4 Chroma wrapper,
+        #5 image norm, #6 chroma data, #7 group traversal, #8 consent gate).
+      placeholder: "#1 order_number (adds a new SlideItem subclass), #4 Chroma wrapper (new endpoint)"
+
+  - type: textarea
+    id: a11y
+    attributes:
+      label: Accessibility (WCAG 2.1 AA) impact
+      description: Does this affect alt text, reading order, contrast, color reliance?
+
+  - type: checkboxes
+    id: pre
+    attributes:
+      label: Before submitting
+      options:
+        - label: I read [`AGENTS.md`](../../AGENTS.md) / [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+          required: true
+        - label: I reviewed the reference implementation in [`docs/AGENT_CONTEXT.md`](../../docs/AGENT_CONTEXT.md).
+          required: true
+        - label: I will fill out [`docs/templates/FEATURE.md`](../../docs/templates/FEATURE.md) in full when the PR is opened.
+          required: true

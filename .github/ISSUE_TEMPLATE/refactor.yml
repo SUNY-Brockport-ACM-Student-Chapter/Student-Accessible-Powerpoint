@@ -1,0 +1,53 @@
+name: Refactor
+description: Structural change with no behavior change. Full template is in docs/templates/REFACTOR.md.
+title: "[refactor] "
+labels: ["refactor"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Strict rule:** a refactor does not change behavior. If it does, this is a Feature or a Bug fix,
+        not a refactor. Be honest with yourself here.
+
+  - type: textarea
+    id: tldr
+    attributes:
+      label: TL;DR
+      description: What structural thing changes, and why behavior stays identical.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: motivation
+    attributes:
+      label: Motivation (pick at least one)
+      options:
+        - label: Closes a tech-debt item from [`docs/guardrails/INVARIANTS.md`](../../docs/guardrails/INVARIANTS.md) section 10
+        - label: Unblocks a planned feature
+        - label: Reduces a footgun from [`docs/AGENT_CONTEXT.md`](../../docs/AGENT_CONTEXT.md)
+        - label: Encodes an invariant in code (not just docs)
+        - label: Other (describe below)
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: In scope (structural) and out of scope (must include "any behavior change").
+    validations:
+      required: true
+
+  - type: textarea
+    id: equivalence
+    attributes:
+      label: How will we know behavior is unchanged?
+      description: Tests, round-trip parity, smoke test, manual comparison.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: pre
+    attributes:
+      label: Before submitting
+      options:
+        - label: I walked through every invariant in [`docs/guardrails/INVARIANTS.md`](../../docs/guardrails/INVARIANTS.md) and can explain why each still holds.
+          required: true

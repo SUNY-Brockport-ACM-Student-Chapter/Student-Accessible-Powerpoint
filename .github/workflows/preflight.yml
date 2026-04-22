@@ -1,0 +1,48 @@
+name: preflight
+
+# Runs the same gate a developer runs locally before opening a PR.
+# Closes the "no CI/CD" gap listed in docs/guardrails/INVARIANTS.md section 10.6.
+#
+# Keep this workflow cheap: no Gemini calls, no Chroma server, no deploy.
+# Integration / smoke tests against prod run manually via scripts/smoke_test.py
+# after SOP_DEPLOY.md.
+
+on:
+  pull_request:
+    branches: [main, Aggrement, Prod-v1]
+  push:
+    branches: [main, Aggrement]
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: doctor + invariants + import smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install runtime deps (best-effort)
+        # If pip install fails (e.g. optional OS-level dep missing), the
+        # preflight import-smoke will still run and degrade gracefully.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+        continue-on-error: true
+
+      - name: Doctor (environment sanity)
+        run: python scripts/doctor.py
+
+      - name: Check invariants
+        run: python scripts/check_invariants.py
+
+      - name: Preflight aggregate
+        run: python scripts/preflight.py

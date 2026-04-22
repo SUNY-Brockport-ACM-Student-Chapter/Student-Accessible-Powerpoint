@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a defect. Full template is in docs/templates/BUG.md.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If production is broken right now, follow
+        [`docs/ops/SOP_INCIDENT.md`](../../docs/ops/SOP_INCIDENT.md) first and open this issue afterwards.
+
+  - type: textarea
+    id: tldr
+    attributes:
+      label: TL;DR
+      description: One sentence - what's wrong.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: env
+    attributes:
+      label: Environment
+      options:
+        - "Local dev"
+        - "Production (access.brockportsigai.org)"
+        - "Older prod instance (35.196.195.118)"
+        - "Other (describe in Repro)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Repro steps
+      description: Numbered steps. Include the input .pptx filename / source if relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence (traceback, screenshot, journalctl excerpt)
+      render: text
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "S1 - prod down / data loss"
+        - "S2 - major feature broken"
+        - "S3 - minor feature broken / workaround exists"
+        - "S4 - cosmetic / dev-only"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: pre
+    attributes:
+      label: Before submitting
+      options:
+        - label: I confirmed this reproduces on the tip of the target branch.
+        - label: I checked [`docs/ops/SOP_INCIDENT.md`](../../docs/ops/SOP_INCIDENT.md) symptom matrix.
+        - label: No secret value is pasted in this report.
+          required: true

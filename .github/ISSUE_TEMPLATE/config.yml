@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Production incident
+    url: https://github.com/SUNY-Brockport-ACM-Student-Chapter/Student-Accessible-Powerpoint/blob/main/docs/ops/SOP_INCIDENT.md
+    about: If prod is down right now, open the SOP and follow it. Log the incident afterwards in docs/ops/INCIDENT_LOG.md.
+  - name: Agent onboarding
+    url: https://github.com/SUNY-Brockport-ACM-Student-Chapter/Student-Accessible-Powerpoint/blob/main/AGENTS.md
+    about: If you are an AI agent picking up this project, start here.
+  - name: Human onboarding
+    url: https://github.com/SUNY-Brockport-ACM-Student-Chapter/Student-Accessible-Powerpoint/blob/main/CONTRIBUTING.md
+    about: Developer onboarding guide.
