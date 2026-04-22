@@ -97,6 +97,16 @@ jobs:
             cat invariants.out
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          # Mirror every output line into workflow annotations so the failure
+          # text is visible via the public annotations API (unlike job logs
+          # and step summaries, which require auth).
+          python - <<'PY'
+          import pathlib, urllib.parse
+          txt = pathlib.Path('invariants.out').read_text(encoding='utf-8', errors='replace')
+          enc = txt.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+          # 4KB is the hard cap on a single annotation body.
+          print(f"::error title=check_invariants output::{enc[:3500]}")
+          PY
           exit $rc
 
       - name: Preflight aggregate
