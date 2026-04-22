@@ -3,3 +3,10 @@
 *.pptx
 /venv
 .env
+
+*.csv
+
+*.json
+
+# Cursor rules and catch-up documentation
+.cursorrules

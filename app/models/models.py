@@ -1,6 +1,8 @@
+import base64
 import pydantic
 from enum import Enum
-from typing import List, Union
+from typing import List, Optional, Union
+from pydantic import field_serializer
 
 class Type(Enum):
     image = "image"
@@ -16,6 +18,10 @@ class SlideItem(pydantic.BaseModel):
 class Image(SlideItem):
     image_bytes: bytes
     extension: str
+
+    @field_serializer('image_bytes')
+    def serialize_image_bytes(self, value: bytes, _info) -> str:
+        return base64.b64encode(value).decode('utf-8')
 
     def metadata(self):
         return {
@@ -44,6 +50,54 @@ class Presentation(pydantic.BaseModel):
     id: str
     name: str
     slides: List[Slide]
+
+
+class WordItem(pydantic.BaseModel):
+    id: str
+    section_number: int
+    content: str
+    type: Type
+    order_number: int
+
+
+class WordImage(WordItem):
+    image_bytes: bytes
+    extension: str
+
+    @field_serializer('image_bytes')
+    def serialize_image_bytes(self, value: bytes, _info) -> str:
+        return base64.b64encode(value).decode('utf-8')
+
+    def metadata(self):
+        return {
+            "type": Type.image.value,
+            "extension": self.extension,
+            "image_id": self.id,
+            "section_number": self.section_number,
+            "order_number": self.order_number
+        }
+
+
+class WordText(WordItem):
+    def metadata(self):
+        return {
+            "type": Type.text.value,
+            "section_number": self.section_number,
+            "order_number": self.order_number
+        }
+
+
+class WordSection(pydantic.BaseModel):
+    id: str
+    section_number: int
+    title: Optional[str] = None
+    items: List[Union[WordImage, WordText]]
+
+
+class WordDocument(pydantic.BaseModel):
+    id: str
+    name: str
+    sections: List[WordSection]
 
 
 class RAG_quizzer(pydantic.BaseModel):

@@ -2,14 +2,8 @@ import streamlit as st
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
 import pytesseract
-from PIL import Image
-import io
-
-import uuid
-from pptx import Presentation as pptx_lib
-from pptx.enum.shapes import MSO_SHAPE_TYPE
-from models.models import Image as ModelImage, Text, Slide, Presentation, Type
-from typing import List, Union
+import subprocess
+import shutil
 
 
 def ExtractText_OCR(img_bytes):
@@ -58,87 +52,80 @@ def clean_text_with_llm(text, model):
     )
     return result.text.strip()
 
-def parse_powerpoint(file_object, file_name):
-    """
-    Parses an in-memory PowerPoint file to extract text and images in order.
 
-    The function extracts text from speaker notes and shapes, and image data
-    from picture shapes, maintaining the slide order.
+def convert_image_to_png_or_jpg(image_bytes, extension):
+    """
+    Convert arbitrary image bytes to PNG (preferred) or JPG using ImageMagick if available.
 
     Args:
-        file_object (io.BytesIO): An in-memory byte stream of the .pptx file.
+        image_bytes (bytes): Source image bytes
+        extension (str): Original file extension (e.g., 'png', 'jpg', 'svg', ...)
 
     Returns:
-        Presentation: A Presentation object containing the slides.
+        (bytes, str) or (None, None): Tuple of (converted_bytes, new_extension), or (None, None) if conversion fails for WMF/EMF
     """
-    prs = pptx_lib(file_object)
+    # Normalize extension
+    ext = (extension or "").lower().lstrip(".")
 
-    PRESENTATION = Presentation(
-        id=str(uuid.uuid4()),
-        name=file_name,
-        slides=[],
-    )
+    # If already web-safe, return as-is
+    if ext in ("jpg", "jpeg"):
+        return image_bytes, "jpg"
+    if ext == "png":
+        return image_bytes, "png"
 
+    # Prefer PNG as the unified output
+    magick = shutil.which("magick") or shutil.which("convert")
+    if not magick:
+        # ImageMagick not available; skip problematic formats
+        if ext in ("wmf", "emf"):
+            print(f"❌ WARNING: ImageMagick not found, cannot convert {ext.upper()} image. Skipping...")
+            return None, None
+        return image_bytes, (ext or "png")
 
-    for slide_idx, slide in enumerate(prs.slides):
-        slide_items: List[Union[Image, Text]] = []
+    # Higher density for vector-like formats to improve rasterization quality
+    vector_like_exts = {"svg", "pdf", "eps", "ai", "emf", "wmf"}
+    density_args = ["-density", "300"] if ext in vector_like_exts else []
 
-        order_number = 0
+    try:
+        # Use stdin/stdout to avoid relying on correct file extensions
+        # Command: magick [-density 300] - -colorspace sRGB png:-
+        cmd = [magick]
+        cmd += density_args
+        cmd += ["-", "-colorspace", "sRGB", "png:-"]
 
-        # Extract from speaker notes first
-        if (
-            slide.has_notes_slide
-            and slide.notes_slide.notes_text_frame
-            and slide.notes_slide.notes_text_frame.text
-        ):
-            text = Text(
-                id=str(uuid.uuid4()),
-                content=slide.notes_slide.notes_text_frame.text,
-                slide_number=slide_idx + 1,
-                type=Type.text,
-                order_number=order_number,
-            )
-            slide_items.append(text)
-
-        # Sort shapes by position (top-to-bottom, left-to-right) for reading order
-        shapes = sorted(
-            slide.shapes,
-            key=lambda x: (
-                (x.top, x.left) if hasattr(x, "top") and hasattr(x, "left") else (0, 0)
-            ),
+        proc = subprocess.run(
+            cmd,
+            input=image_bytes,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-
-        # Extract from shapes on the slide
-        for shape in shapes:
-            if shape.has_text_frame and shape.text_frame.text:
-                text = Text(
-                    id=str(uuid.uuid4()),
-                    content=shape.text_frame.text,
-                    slide_number=slide_idx + 1,
-                    type=Type.text,
-                    order_number=order_number,
-                )
-                slide_items.append(text)
-                order_number += 1
-            elif shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                image_bytes = shape.image.blob
-                image_ext = shape.image.ext
-                image = ModelImage(
-                    id=str(uuid.uuid4()),
-                    content='none',
-                    extension=image_ext,
-                    image_bytes=image_bytes,
-                    slide_number=slide_idx + 1,
-                    type=Type.image,
-                    order_number=order_number,
-                )
-                slide_items.append(image)
-                order_number += 1
-
-        PRESENTATION.slides.append(Slide(
-            id=str(uuid.uuid4()),
-            slide_number=slide_idx + 1,
-            items=slide_items,
-        ))
-
-    return PRESENTATION
+        
+        # Verify output is valid
+        if len(proc.stdout) == 0:
+            raise Exception(f"ImageMagick returned empty output for {ext}")
+            
+        return proc.stdout, "png"
+        
+    except subprocess.CalledProcessError as e:
+        # Log the actual error for debugging
+        stderr_output = e.stderr.decode('utf-8', errors='ignore') if e.stderr else 'N/A'
+        print(f"❌ ERROR: ImageMagick conversion failed for {ext.upper()}")
+        print(f"   Command: {' '.join(cmd)}")
+        print(f"   Return code: {e.returncode}")
+        print(f"   stderr: {stderr_output[:300]}")  # First 300 chars
+        
+        # For formats that REQUIRE conversion (WMF, EMF), skip the image
+        if ext in ("wmf", "emf"):
+            print(f"   → Skipping {ext.upper()} image (cannot be used without conversion)")
+            return None, None
+        
+        # For other formats, try to return original (risky but might work)
+        print(f"   → Falling back to original {ext} bytes")
+        return image_bytes, (ext or "png")
+    except Exception as e:
+        print(f"❌ ERROR: Unexpected error converting {ext.upper()}: {str(e)}")
+        if ext in ("wmf", "emf"):
+            print(f"   → Skipping {ext.upper()} image")
+            return None, None
+        return image_bytes, (ext or "png")
