@@ -33,7 +33,13 @@ python scripts/check_invariants.py --only order_number
 
 **Why.** Screen readers (NVDA, JAWS, VoiceOver) read `cNvPr/@descr`. `python-pptx`'s `alternative_text` property sometimes writes to a different location depending on shape type, and is silently ignored by some clients.
 
-**Where.** `app/ppt_notes.py :: process_powerpoint_with_rag_enhanced` → the XML patching block. Look for `cNvPr` and `descr`.
+**Where.** Varies by branch:
+
+- `main`, `RAG-integration-branch`: `app/ppt_notes.py` (rebuild loop lives here).
+- `Aggrement`: `app/pptx_rag_quizzer/pptx.py :: rebuild_presentation_with_accessible_features`.
+- `Prod-v1`: follows one of the above depending on the cherry-pick history.
+
+The `check_alt_text_xml` invariant scans all of `app/` for a line that writes `descr` onto `cNvPr`, so moving the rebuild loop between modules is fine — *deleting* the XML write is not.
 
 **Check.**
 

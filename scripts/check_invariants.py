@@ -83,16 +83,26 @@ def check_order_number() -> CheckResult:
 def check_alt_text_xml() -> CheckResult:
     """
     Invariant #2: alt text writes to cNvPr/@descr (native XML).
+
+    Different branches put the rebuild loop in different modules:
+      - main / RAG-integration-branch: app/ppt_notes.py
+      - Aggrement:                      app/pptx_rag_quizzer/pptx.py
+      - Prod-v1:                        may be either of the above
+    Rather than pin a path, scan all of app/ for a line that writes a
+    `descr` attribute onto a cNvPr element. That is the *actual* invariant.
     """
-    target = APP / "ppt_notes.py"
-    txt = _read(target)
-    if not txt:
-        return False, f"cannot read {target}"
-    if "cNvPr" not in txt:
-        return False, "cNvPr not referenced in app/ppt_notes.py — alt text may not be hitting native XML"
-    if "descr" not in txt:
-        return False, "`descr` attribute not referenced — alt text write is incomplete"
-    return True, "cNvPr + descr present in app/ppt_notes.py"
+    pattern = re.compile(r"cNvPr[^\n]{0,120}descr|descr[^\n]{0,120}cNvPr")
+    hits: List[str] = []
+    for py in _walk_py(APP):
+        txt = _read(py)
+        if pattern.search(txt):
+            hits.append(str(py.relative_to(REPO_ROOT)))
+    if not hits:
+        return False, (
+            "no file in app/ writes `descr` onto a cNvPr element. Alt text "
+            "is probably not hitting native PPTX XML. See INVARIANTS.md §2."
+        )
+    return True, f"cNvPr/@descr write found in: {', '.join(hits)}"
 
 
 def check_gemini_rate_limit() -> CheckResult:
