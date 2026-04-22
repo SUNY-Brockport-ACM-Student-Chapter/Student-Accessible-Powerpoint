@@ -1,0 +1,18 @@
+# Ownership for review routing. Keep this short - we want real reviewers, not
+# rubber stamps.
+
+# Framework & docs: any maintainer.
+/AGENTS.md
+/CONTRIBUTING.md
+/docs/                       @SUNY-Brockport-ACM-Student-Chapter/maintainers
+
+# Production-sensitive: ops + a code reviewer.
+/docs/ops/                   @SUNY-Brockport-ACM-Student-Chapter/maintainers
+/docs/PRODUCTION_ENVIRONMENT.md  @SUNY-Brockport-ACM-Student-Chapter/maintainers
+/scripts/                    @SUNY-Brockport-ACM-Student-Chapter/maintainers
+
+# App code: maintainers. When a frontend team exists, split this.
+/app/                        @SUNY-Brockport-ACM-Student-Chapter/maintainers
+
+# CI + templates change how everyone works - require review.
+/.github/                    @SUNY-Brockport-ACM-Student-Chapter/maintainers
