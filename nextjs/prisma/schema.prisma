@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// One row per authenticated user. Mirrors Supabase auth.users.id.
+model Profile {
+  id                String         @id
+  email             String         @unique
+  consentAcceptedAt DateTime?
+  consentVersion    String?
+  createdAt         DateTime       @default(now())
+  jobs              Job[]
+  consentEvents     ConsentEvent[]
+}
+
+/// One row per deck upload.
+model Job {
+  id               String             @id @default(uuid())
+  profileId        String
+  profile          Profile            @relation(fields: [profileId], references: [id])
+  uploadedFilename String
+  uploadObjectPath String
+  outputObjectPath String?
+  status           JobStatus          @default(queued)
+  phase            String?
+  progressCurrent  Int                @default(0)
+  progressTotal    Int                @default(0)
+  errorCode        String?
+  errorMessage     String?
+  collectionId     String?
+  schemaVersion    Int                @default(1)
+  createdAt        DateTime           @default(now())
+  startedAt        DateTime?
+  awaitingReviewAt DateTime?
+  committedAt      DateTime?
+  readyAt          DateTime?
+  descriptions     SlideDescription[]
+
+  @@index([profileId, createdAt])
+}
+
+enum JobStatus {
+  queued
+  parsing
+  describing
+  awaiting_review
+  rebuilding
+  ready
+  error
+  cancelled
+}
+
+/// One row per reviewable image in a deck. `orderNumber` is the Python shape-order join key.
+model SlideDescription {
+  id            String   @id @default(uuid())
+  jobId         String
+  job           Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  slideNumber   Int
+  orderNumber   Int
+  itemType      String
+  aiDescription String?
+  finalAltText  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([jobId, slideNumber, orderNumber])
+  @@index([jobId])
+}
+
+/// Append-only IRB audit trail. Duplicates some Profile data on purpose.
+model ConsentEvent {
+  id             String   @id @default(uuid())
+  profileId      String
+  profile        Profile  @relation(fields: [profileId], references: [id])
+  acceptedAt     DateTime @default(now())
+  consentVersion String
+  ipHash         String
+  userAgent      String?
+
+  @@index([profileId, acceptedAt])
+}

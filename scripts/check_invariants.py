@@ -97,10 +97,27 @@ def check_package_dependencies() -> list[str]:
     return failures
 
 
+def check_proxy_guards_consent() -> list[str]:
+    proxy_file = NEXTJS / "src" / "proxy.ts"
+    if not proxy_file.exists():
+        return ["proxy_guards_consent: nextjs/src/proxy.ts is missing"]
+
+    text = proxy_file.read_text(encoding="utf-8", errors="ignore")
+    required_tokens = ["consentAcceptedAt", "/consent", "getUser"]
+    missing = [token for token in required_tokens if token not in text]
+    if missing:
+        return [
+            "proxy_guards_consent: nextjs/src/proxy.ts is missing "
+            + ", ".join(repr(token) for token in missing)
+        ]
+    return []
+
+
 def main() -> int:
     failures = [
         *check_ts_forbidden_tokens(),
         *check_package_dependencies(),
+        *check_proxy_guards_consent(),
     ]
 
     if failures:

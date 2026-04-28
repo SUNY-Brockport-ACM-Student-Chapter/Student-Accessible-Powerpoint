@@ -403,10 +403,10 @@ Above-50MB support is explicitly out of scope for v1; resumable/tus-style upload
 | 5 | Image normalization | Python `ImageProcessor`. Unchanged. | Unchanged Python invariant check. |
 | 6 | `chroma/` data is not to be cleaned | Now a **named Docker volume** (`chroma_data`), mounted at `/chroma/chroma` inside the Chroma container. Lives outside the repo tree. Closes the `git clean` footgun. | `.gitignore` scan unchanged; new compose-level invariant added to `INVARIANTS.md` (§16.1). |
 | 7 | Group-shape recursion | Python. Unchanged. | Unchanged Python invariant check. |
-| 8 | Consent gate (IRB) | Moved from Streamlit first-page + CSV to `Profile.consentAcceptedAt` + `ConsentEvent` + Next.js middleware (§9). Stronger than before: cannot bypass by direct URL. | New middleware-level assertion; new test in §15.3. |
+| 8 | Consent gate (IRB) | Moved from Streamlit first-page + CSV to `Profile.consentAcceptedAt` + `ConsentEvent` + Next.js Proxy (§9; formerly Middleware in older Next.js docs). Stronger than before: cannot bypass by direct URL. | New proxy-level assertion; new test in §15.3. |
 | 9 | Branches are a pipeline | `nextjs-migration-*` implementation branches → PRs → merge into `main` after review. `Aggrement` remains the behavior reference for live IRB/Streamlit behavior. No lateral merges with `Prod-v1`; Docker Compose assets are cherry-picked, not merged. | Branching doc updated (§16.3). |
 | 10 | Tech-debt gaps (§10.x) | Closed by construction: 10.1 (plaintext secrets → Vercel env + Compose env from a secured `.env`; further upgrade to Secret Manager is noted in §11.6), 10.4 (public ports closed; Caddy fronts only the FastAPI), 10.6 (Vercel deploys + GitHub Actions = implicit CI), 10.7 (Vercel scales the UI; backend SPOF remains — noted), 10.8 (compose + Caddyfile + Dockerfiles all in repo). | Update to `INVARIANTS.md §10` at cutover. |
-| 11 | Configuration of record | **Satisfied on day 1.** Docker Compose, Dockerfile.api, Caddyfile, Prisma schema, middleware, and every env var template (`.env.example`) are committed on this branch. Changes on the VM must land here first. | New invariant-level test: `docker compose config` must parse, `Caddyfile fmt` clean. |
+| 11 | Configuration of record | **Satisfied on day 1.** Docker Compose, Dockerfile.api, Caddyfile, Prisma schema, Proxy, and every env var template (`.env.example`) are committed on this branch. Changes on the VM must land here first. | New invariant-level test: `docker compose config` must parse, `Caddyfile fmt` clean. |
 
 ---
 
@@ -415,13 +415,13 @@ Above-50MB support is explicitly out of scope for v1; resumable/tus-style upload
 ### 9.1 Flow
 
 1. A user signs in via Supabase Auth.
-2. `middleware.ts` inspects every non-auth, non-asset request. If `profile.consentAcceptedAt IS NULL`, it rewrites to `/consent`.
+2. `proxy.ts` inspects every non-auth, non-asset request. If `profile.consentAcceptedAt IS NULL`, it rewrites to `/consent`.
 3. `/consent` is an RSC that fetches the current consent text from the repo (`docs/irb/consent-v1.md`, authoritative, version-pinned in code), plus the user's `consentVersion` if present.
 4. On submit, a Server Action:
    a. inserts a `ConsentEvent` row with IP hash + UA + version,
    b. updates `Profile.consentAcceptedAt` and `consentVersion`,
    c. redirects to `/upload`.
-5. The consent gate **cannot** be bypassed by deep-linking to `/upload`, `/process/*`, `/review/*`, `/download/*`, `/api/uploads`, or `/api/jobs/*` — middleware runs first.
+5. The consent gate **cannot** be bypassed by deep-linking to `/upload`, `/process/*`, `/review/*`, `/download/*`, `/api/uploads`, or `/api/jobs/*` — Proxy runs first.
 
 ### 9.2 IRB specifics — **[PENDING MANUAL CONFIRMATION]**
 
@@ -431,7 +431,7 @@ Above-50MB support is explicitly out of scope for v1; resumable/tus-style upload
 - Whether consent-version bumps require re-consent (default: yes).
 - Whether minors-data policy applies.
 
-The technical substrate (Profile flag + append-only event log + middleware) is frozen regardless of the above.
+The technical substrate (Profile flag + append-only event log + Proxy) is frozen regardless of the above.
 
 ### 9.3 Data migration
 
@@ -446,7 +446,7 @@ The legacy `consent_responses.csv` on the prod VM is imported as historical `Con
 - **v1.1+ sign-in:** SUNY SSO via Supabase's external OIDC provider. Target post-cutover.
 - **Session:** Supabase cookie session consumed server-side by `@supabase/ssr`. No JWT in localStorage.
 - **Server access:** Route Handlers and Server Actions get the user via `supabaseServerClient(cookies())`. Unauthed → 401.
-- **Middleware:** enforces auth + consent on all non-auth routes.
+- **Proxy:** enforces auth + consent on all non-auth routes.
 - **Service-role key:** stored as `SUPABASE_SERVICE_ROLE_KEY` in Vercel env only. Never in a client bundle. Used only from Route Handlers that need to bypass RLS (admin/debug endpoints) — none in v1.
 
 Public-internet exposure of Gemini-bearing endpoints (§10.4 of INVARIANTS) is now closed by construction: `/api/jobs/*` requires a session; `/jobs/*` on the Python side requires the shared secret; the raw Chroma port 8000 is **not** published outside the Docker network (§11.3).
@@ -570,7 +570,7 @@ The existing `start_scripts/` directory on the VM (Streamlit + systemd) is archi
 │   │   │   ├── supabase.ts    # server + client helpers
 │   │   │   ├── processor.ts   # HTTP client for the Python sidecar
 │   │   │   └── storage.ts     # Supabase Storage helpers
-│   │   ├── middleware.ts      # auth + consent gate (invariant #8)
+│   │   ├── proxy.ts           # auth + consent gate (invariant #8)
 │   │   └── components/        # UI primitives
 │   └── .env.example
 ├── scripts/                   # Python — extended (§16.4)
@@ -646,7 +646,7 @@ The existing Python modules are **not moved, renamed, or rewritten** by this des
 |---|---|---|
 | Python unit | `pytest` | Existing + new `processing_service/` orchestration tests. |
 | Python contract | `pytest` + `fastapi.testclient` | `/jobs/*` request/response schemas. |
-| TS unit | `vitest` | Prisma model invariants, middleware, Route Handler logic (mocking Python and Supabase). |
+| TS unit | `vitest` | Prisma model invariants, Proxy, Route Handler logic (mocking Python and Supabase). |
 | TS integration | `playwright` | End-to-end `/upload → /review → /download` against a staging stack. |
 | PPTX round-trip | `pytest` on Python side | One fixture per invariant: group shapes, WMF image, RGBA image, large deck, empty notes. |
 | Accessibility (deck output) | Manual via PowerPoint Accessibility Checker on every fixture deck — rotating owner **[PENDING]**. |
@@ -715,7 +715,7 @@ Extend `.github/workflows/preflight.yml` already shipped on `feature/agent-ops-f
 - **Invariant #2 (updated) — Python-only.** The cNvPr/@descr write is allowed only in Python files. Any TypeScript that references `cNvPr` or `descr=` triggers a hard fail.
 - **Invariant #4 (strengthened).** Extends the existing "Chroma via FastAPI wrapper" rule to explicitly forbid any JavaScript Chroma client.
 - **Invariant #6 (closed).** Data lives in Docker volume `chroma_data`. `./chroma/` under the repo is deleted post-cutover. Invariant text updated accordingly.
-- **Invariant #8 (evolved).** Consent gate is now Profile flag + middleware + event log, not a Streamlit page + CSV.
+- **Invariant #8 (evolved).** Consent gate is now Profile flag + Proxy + event log, not a Streamlit page + CSV.
 - **Invariant #11 (satisfied).** Deploy configuration lives in `deploy/`.
 
 ### 16.4 `check_invariants.py` extensions
@@ -730,7 +730,7 @@ Additions to the existing checks (no change to passing checks on `feature/agent-
 | `ts_no_ooxml_strings` | No `.ts`/`.tsx` contains `cNvPr` or `a:blip`. |
 | `compose_strips_streamlit` | `deploy/docker-compose.yml` has no service named `web` after cutover PR lands. |
 | `no_public_internal_ports` | `deploy/docker-compose.yml` publishes only `80`/`443` on host. |
-| `middleware_guards_consent` | `nextjs/src/middleware.ts` contains the consent check (regex probe). |
+| `proxy_guards_consent` | `nextjs/src/proxy.ts` contains the consent check (regex probe). |
 
 Each check added in this section is documented in `INVARIANTS.md` with rationale + check command.
 

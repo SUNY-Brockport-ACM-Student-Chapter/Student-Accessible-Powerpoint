@@ -20,4 +20,5 @@ nextjs/node_modules/
 nextjs/.next/
 nextjs/out/
 nextjs/tsconfig.tsbuildinfo
+nextjs/src/generated/prisma/
 nextjs/.env*.local
