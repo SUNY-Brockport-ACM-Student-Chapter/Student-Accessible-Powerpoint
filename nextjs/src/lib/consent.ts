@@ -10,7 +10,7 @@ export const CONSENT_VERSION = "consent-v1";
 
 export async function getConsentMarkdown() {
   return readFile(
-    path.join(process.cwd(), "..", "docs", "irb", `${CONSENT_VERSION}.md`),
+    path.join(process.cwd(), "src", "content", `${CONSENT_VERSION}.md`),
     "utf8",
   );
 }
