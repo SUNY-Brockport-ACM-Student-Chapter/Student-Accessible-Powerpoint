@@ -10,3 +10,14 @@
 
 # Cursor rules and catch-up documentation
 .cursorrules
+
+# Next.js migration scaffold: allow committed configuration JSON while
+# keeping generated/runtime artifacts out of the repo.
+!nextjs/package.json
+!nextjs/package-lock.json
+!nextjs/tsconfig.json
+nextjs/node_modules/
+nextjs/.next/
+nextjs/out/
+nextjs/tsconfig.tsbuildinfo
+nextjs/.env*.local
