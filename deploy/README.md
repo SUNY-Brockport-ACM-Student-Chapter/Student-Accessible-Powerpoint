@@ -10,6 +10,6 @@ Files from `docs/refactor/NEXTJS_MIGRATION_DESIGN.md`:
 - `env/.env.example`
 - `systemd/docker-compose@sap.service`
 
-Copy `env/.env.example` to `env/.env` on the VM, fill it from the secured deployment secret store, and keep `env/.env` out of git.
+Copy `env/.env.example` to `env/.env` and `env/caddy.env.example` to `env/caddy.env` on the VM. Fill both from the secured deployment secret store and keep the concrete `.env` files out of git.
 
 The stack exposes only Caddy on ports 80/443. Chroma and the Python API stay inside the Docker network.

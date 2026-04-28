@@ -6,11 +6,9 @@
 	encode zstd gzip
 
 	@jobs path /jobs/*
-	@collections path /collections*
 	@health path /health
 
 	reverse_proxy @jobs api:8001
-	reverse_proxy @collections api:8001
 	reverse_proxy @health api:8001
 
 	respond "not found" 404

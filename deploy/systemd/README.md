@@ -8,6 +8,10 @@ Expected deployment layout on the VM:
 /opt/sap/current/deploy
 ```
 
+`current` is expected to be a symlink to the active release directory. If the VM
+uses a plain git checkout instead, update `WorkingDirectory` in the unit before
+enabling it.
+
 Install with:
 
 ```sh

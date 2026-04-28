@@ -23,6 +23,11 @@ services:
       CHROMA_SERVER_HOST: chroma
       CHROMA_SERVER_HTTP_PORT: 8000
       CHROMA_API_URL: http://api:8001
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     expose:
       - "8001"
     depends_on:
@@ -34,9 +39,9 @@ services:
     image: caddy:2
     restart: unless-stopped
     env_file:
-      - path: env/.env.example
+      - path: env/caddy.env.example
         required: true
-      - path: env/.env
+      - path: env/caddy.env
         required: false
     ports:
       - "80:80"
