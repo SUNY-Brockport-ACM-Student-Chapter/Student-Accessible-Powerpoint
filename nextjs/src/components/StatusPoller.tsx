@@ -17,6 +17,8 @@ export function StatusPoller({ jobId }: { jobId: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: number | undefined;
+    const startedAt = Date.now();
 
     async function poll() {
       const response = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
@@ -32,15 +34,19 @@ export function StatusPoller({ jobId }: { jobId: string }) {
         router.push(`/review/${jobId}`);
       } else if (nextJob.status === "ready") {
         router.push(`/download/${jobId}`);
+      } else if (nextJob.status !== "error") {
+        const elapsedMs = Date.now() - startedAt;
+        timeoutId = window.setTimeout(() => void poll(), elapsedMs > 120000 ? 10000 : 5000);
       }
     }
 
     void poll();
-    const interval = window.setInterval(() => void poll(), 5000);
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [jobId, router]);
 
