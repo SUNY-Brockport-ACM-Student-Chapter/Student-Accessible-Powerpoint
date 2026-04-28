@@ -2,9 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { MAX_UPLOAD_BYTES } from "@/lib/constants";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 type UploadState =
   | { status: "idle"; message: string }

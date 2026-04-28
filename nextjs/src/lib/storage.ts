@@ -1,9 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
+import { MAX_UPLOAD_BYTES, PPTX_MIME_TYPE } from "@/lib/constants";
 import { requireEnv } from "@/lib/env";
 
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-export const PPTX_MIME_TYPE =
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+export { MAX_UPLOAD_BYTES, PPTX_MIME_TYPE };
 
 function createSupabaseAdminClient() {
   return createClient(
