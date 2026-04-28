@@ -1,10 +1,10 @@
 # Next.js Server Libraries
 
-Planned modules from the migration design:
+Modules from the migration design:
 
 - `db.ts` — Prisma singleton.
 - `supabase.ts` — Supabase server/client helpers.
 - `processor.ts` — HTTP client for the Python processing service.
 - `storage.ts` — Supabase Storage helpers.
 
-These are intentionally not implemented in the scaffold PR. Follow-up PRs should add them with focused tests and no client-side secret exposure.
+`processor.ts` and `storage.ts` will land with the upload/processing PRs. Keep all secret-bearing helpers server-only.
