@@ -1,18 +1,14 @@
 import { createHash } from "crypto";
-import { readFile } from "fs/promises";
-import path from "path";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireCurrentProfile } from "@/lib/auth";
+import { CONSENT_MARKDOWN } from "@/content/consent";
 import { prisma } from "@/lib/db";
 
 export const CONSENT_VERSION = "consent-v1";
 
-export async function getConsentMarkdown() {
-  return readFile(
-    path.join(process.cwd(), "src", "content", `${CONSENT_VERSION}.md`),
-    "utf8",
-  );
+export function getConsentMarkdown() {
+  return CONSENT_MARKDOWN;
 }
 
 function hashIp(ip: string) {

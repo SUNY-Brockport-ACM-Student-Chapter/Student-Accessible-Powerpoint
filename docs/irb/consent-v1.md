@@ -3,7 +3,7 @@
 > Pending manual confirmation: replace this placeholder with the IRB-approved
 > consent language before production cutover.
 >
-> Runtime copy: `nextjs/src/content/consent-v1.md`. Keep both files in sync
+> Runtime copy: `nextjs/src/content/consent.ts`. Keep both files in sync
 > until the final IRB-approved text lands.
 
 This tool helps generate accessibility descriptions for images in uploaded

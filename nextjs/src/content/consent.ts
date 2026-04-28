@@ -1,4 +1,4 @@
-# Consent to Participate
+export const CONSENT_MARKDOWN = `# Consent to Participate
 
 > Pending manual confirmation: replace this placeholder with the IRB-approved
 > consent language before production cutover.
@@ -14,3 +14,4 @@ By continuing, you confirm that you understand:
 - AI-generated descriptions must be reviewed before use.
 - Your consent acceptance is recorded for audit purposes.
 - Final data retention and research-use language is pending IRB confirmation.
+`;
