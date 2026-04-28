@@ -1,6 +1,6 @@
 # Next.js Migration — Design
 
-> **Status:** Finalized technical design, derived from explicit architectural decisions made against [`NEXTJS_MIGRATION_PREFLIGHT.md`](./NEXTJS_MIGRATION_PREFLIGHT.md). This document is the **binding blueprint** for the refactor on branch `refactor/nextjs-migration`.
+> **Status:** Finalized technical design, derived from explicit architectural decisions made against [`NEXTJS_MIGRATION_PREFLIGHT.md`](./NEXTJS_MIGRATION_PREFLIGHT.md). This document is the **binding blueprint** for the Next.js migration implementation branches. The first implementation branch is `nextjs-migration-scaffold`; `refactor/nextjs-migration` is unavailable because `origin/refactor` already exists.
 >
 > **Institutional / operational items that require external sign-off** are marked **[PENDING MANUAL CONFIRMATION]**. These do not block technical work; they block cutover.
 >
@@ -111,7 +111,7 @@ The current prototype at `nextjs-impl` is **reference only**. This design delibe
 We do carry forward:
 - `package.json`'s Next.js 16.2.3 / React 19.2.4 pinning.
 - Tailwind 4 + the `lucide-react` / `framer-motion` UI direction, provided the final palette clears WCAG AA contrast (§15.5).
-- The `backups/python-legacy/` archival pattern — once `refactor/nextjs-migration` lands, the Streamlit code is moved there.
+- The `backups/python-legacy/` archival pattern — once the Next.js migration lands, the Streamlit code is moved there.
 
 ---
 
@@ -404,7 +404,7 @@ Above-50MB support is explicitly out of scope for v1; resumable/tus-style upload
 | 6 | `chroma/` data is not to be cleaned | Now a **named Docker volume** (`chroma_data`), mounted at `/chroma/chroma` inside the Chroma container. Lives outside the repo tree. Closes the `git clean` footgun. | `.gitignore` scan unchanged; new compose-level invariant added to `INVARIANTS.md` (§16.1). |
 | 7 | Group-shape recursion | Python. Unchanged. | Unchanged Python invariant check. |
 | 8 | Consent gate (IRB) | Moved from Streamlit first-page + CSV to `Profile.consentAcceptedAt` + `ConsentEvent` + Next.js middleware (§9). Stronger than before: cannot bypass by direct URL. | New middleware-level assertion; new test in §15.3. |
-| 9 | Branches are a pipeline | `refactor/nextjs-migration` → PR → merge into `Aggrement`'s successor (`main` after cutover). No lateral merges with `Prod-v1`. Docker Compose assets cherry-picked, not merged. | Branching doc updated (§16.3). |
+| 9 | Branches are a pipeline | `nextjs-migration-*` implementation branches → PRs → merge into `main` after review. `Aggrement` remains the behavior reference for live IRB/Streamlit behavior. No lateral merges with `Prod-v1`; Docker Compose assets are cherry-picked, not merged. | Branching doc updated (§16.3). |
 | 10 | Tech-debt gaps (§10.x) | Closed by construction: 10.1 (plaintext secrets → Vercel env + Compose env from a secured `.env`; further upgrade to Secret Manager is noted in §11.6), 10.4 (public ports closed; Caddy fronts only the FastAPI), 10.6 (Vercel deploys + GitHub Actions = implicit CI), 10.7 (Vercel scales the UI; backend SPOF remains — noted), 10.8 (compose + Caddyfile + Dockerfiles all in repo). | Update to `INVARIANTS.md §10` at cutover. |
 | 11 | Configuration of record | **Satisfied on day 1.** Docker Compose, Dockerfile.api, Caddyfile, Prisma schema, middleware, and every env var template (`.env.example`) are committed on this branch. Changes on the VM must land here first. | New invariant-level test: `docker compose config` must parse, `Caddyfile fmt` clean. |
 
@@ -583,7 +583,7 @@ The existing Python modules are **not moved, renamed, or rewritten** by this des
 
 ### 13.2 Disposition of `nextjs-impl` branch files
 
-| File on `nextjs-impl` | Disposition on `refactor/nextjs-migration` |
+| File on `nextjs-impl` | Disposition on the Next.js migration branches |
 |---|---|
 | `package.json` | Carry forward; re-pin only if security advisories force it. |
 | `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `postcss.config.mjs` | Carry forward. |
@@ -612,7 +612,7 @@ The existing Python modules are **not moved, renamed, or rewritten** by this des
 ### 14.2 Cutover steps (sequence)
 
 1. Freeze `Aggrement` (**[PENDING]** date).
-2. Merge `refactor/nextjs-migration` → `Aggrement`-successor branch (new `main`).
+2. Merge reviewed `nextjs-migration-*` implementation branches into `main`.
 3. Deploy Compose stack to VM: `docker compose -f deploy/docker-compose.yml up -d --build`.
 4. Delete GCP firewall rules `allow-8501`, `allow-8001`.
 5. Bind Streamlit systemd units to `127.0.0.1` (not disabled yet).
@@ -696,7 +696,7 @@ Extend `.github/workflows/preflight.yml` already shipped on `feature/agent-ops-f
 - `docs/AGENT_CONTEXT.md` — add Next.js + Supabase entries; mark Streamlit as legacy.
 - `docs/PRODUCTION_ENVIRONMENT.md` — rewrite for split hosting + Compose stack.
 - `docs/guardrails/INVARIANTS.md` — update §2, §4, §6, §8, §10, §11 per §8 above. Add invariant #12 (see §16.3).
-- `docs/guardrails/BRANCHING.md` — retire `nextjs-impl`; formalize `refactor/nextjs-migration` → `main` flow; forbid lateral merges with `Prod-v1` beyond the compose cherry-pick.
+- `docs/guardrails/BRANCHING.md` — retire `nextjs-impl`; formalize `nextjs-migration-*` → `main` flow; forbid lateral merges with `Prod-v1` beyond the compose cherry-pick.
 - `docs/ops/SOP_DEPLOY.md` — split into SOP_DEPLOY_VERCEL and SOP_DEPLOY_BACKEND.
 - `docs/ops/SOP_ROLLBACK.md` — §14.3 above.
 - `docs/ops/SOP_SECRETS.md` — Vercel + VM `.env` flows.
