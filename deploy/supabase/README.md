@@ -16,3 +16,6 @@ where id = 'pptx-uploads';
 The client-provided upload size is only a fast-fail UX check. Supabase Storage
 must enforce the 50 MB ceiling so signed upload URLs cannot be abused with
 oversized files.
+
+`provisioning.sql` captures the required RLS policy and bucket settings. Run it
+after the Prisma schema exists in Supabase.
