@@ -69,3 +69,18 @@ export async function verifyPresentationUploadExists(objectPath: string) {
 
   return data.some((object) => object.name === filename);
 }
+
+export async function createOutputSignedDownloadUrl(objectPath: string) {
+  const supabase = createSupabaseAdminClient();
+  const bucket = requireEnv("SUPABASE_OUTPUTS_BUCKET");
+
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(objectPath, 60 * 10);
+
+  if (error) {
+    throw error;
+  }
+
+  return data.signedUrl;
+}
