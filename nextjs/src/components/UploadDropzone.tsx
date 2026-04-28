@@ -2,6 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 type UploadState =
   | { status: "idle"; message: string }
@@ -21,14 +24,62 @@ export function UploadDropzone() {
       return;
     }
 
+    if (!file.name.toLowerCase().endsWith(".pptx")) {
+      setState({ status: "error", message: "Choose a .pptx PowerPoint file." });
+      return;
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setState({ status: "error", message: "PowerPoint uploads are limited to 50 MB." });
+      return;
+    }
+
+    setState({ status: "uploading", message: "Preparing private upload..." });
+
+    const signedResponse = await fetch("/api/uploads/signed-url", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        sizeBytes: file.size,
+        contentType: file.type,
+      }),
+    });
+    const signedPayload = await signedResponse.json();
+
+    if (!signedResponse.ok || !signedPayload.ok) {
+      setState({
+        status: "error",
+        message: signedPayload.error?.message ?? "Upload could not be prepared.",
+      });
+      return;
+    }
+
     setState({ status: "uploading", message: "Uploading deck..." });
 
-    const formData = new FormData();
-    formData.append("file", file);
+    const supabase = createSupabaseBrowserClient();
+    const { error: uploadError } = await supabase.storage
+      .from(signedPayload.data.bucket)
+      .uploadToSignedUrl(signedPayload.data.path, signedPayload.data.token, file);
+
+    if (uploadError) {
+      setState({ status: "error", message: uploadError.message });
+      return;
+    }
+
+    setState({ status: "uploading", message: "Starting processing job..." });
 
     const response = await fetch("/api/uploads", {
       method: "POST",
-      body: formData,
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        storageObject: signedPayload.data.path,
+        presentationName: file.name,
+      }),
     });
     const payload = await response.json();
 

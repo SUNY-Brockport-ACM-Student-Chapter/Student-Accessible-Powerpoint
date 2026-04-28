@@ -3,28 +3,11 @@ import { fail, ok } from "@/lib/api";
 import { requireCurrentProfile } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { startProcessingJob } from "@/lib/processor";
-import {
-  buildUploadObjectPath,
-  isPptxFile,
-  MAX_UPLOAD_BYTES,
-  uploadPresentationToStorage,
-} from "@/lib/storage";
+import { isPptxFilename, verifyPresentationUploadExists } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (contentLength > MAX_UPLOAD_BYTES) {
-    return fail(
-      {
-        code: "UPLOAD_TOO_LARGE",
-        message: "PowerPoint uploads are limited to 50 MB.",
-        retryable: false,
-      },
-      413,
-    );
-  }
-
   const profile = await requireCurrentProfile();
   if (!profile) {
     return fail(
@@ -48,38 +31,38 @@ export async function POST(request: Request) {
     );
   }
 
-  const formData = await request.formData();
-  const file = formData.get("file");
+  const body = await request.json().catch(() => null);
+  const storagePath = typeof body?.storageObject === "string" ? body.storageObject : "";
+  const presentationName =
+    typeof body?.presentationName === "string" ? body.presentationName : "";
 
-  if (!(file instanceof File) || !isPptxFile(file)) {
+  if (!storagePath.startsWith(`${profile.id}/`) || !isPptxFilename(presentationName)) {
     return fail(
       {
         code: "INVALID_FILE",
-        message: "Upload a .pptx PowerPoint file.",
+        message: "Complete a signed .pptx upload before creating a job.",
         retryable: false,
       },
       400,
     );
   }
 
-  if (file.size > MAX_UPLOAD_BYTES) {
+  const uploadExists = await verifyPresentationUploadExists(storagePath);
+  if (!uploadExists) {
     return fail(
       {
-        code: "UPLOAD_TOO_LARGE",
-        message: "PowerPoint uploads are limited to 50 MB.",
-        retryable: false,
+        code: "INVALID_FILE",
+        message: "Uploaded deck was not found in storage.",
+        retryable: true,
       },
-      413,
+      400,
     );
   }
-
-  const objectPath = buildUploadObjectPath(profile.id, file.name);
-  const storagePath = await uploadPresentationToStorage({ file, objectPath });
 
   const job = await prisma.job.create({
     data: {
       profileId: profile.id,
-      uploadedFilename: file.name,
+      uploadedFilename: presentationName,
       uploadObjectPath: storagePath,
       status: JobStatus.queued,
     },
@@ -91,7 +74,7 @@ export async function POST(request: Request) {
   try {
     await startProcessingJob(job.id, {
       storage_object: storagePath,
-      presentation_name: file.name,
+      presentation_name: presentationName,
     });
   } catch (error) {
     await prisma.job.update({
