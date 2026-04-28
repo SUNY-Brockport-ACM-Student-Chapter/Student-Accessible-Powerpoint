@@ -7,4 +7,4 @@ Modules from the migration design:
 - `processor.ts` — HTTP client for the Python processing service.
 - `storage.ts` — Supabase Storage helpers.
 
-`processor.ts` and `storage.ts` will land with the upload/processing PRs. Keep all secret-bearing helpers server-only.
+Keep all secret-bearing helpers server-only.
