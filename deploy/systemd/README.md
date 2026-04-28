@@ -1,5 +1,17 @@
 # systemd
 
-The production boot unit for Docker Compose will be added with the deployment PR.
+`docker-compose@sap.service` starts the Docker Compose stack at boot.
 
-Target file from the design: `docker-compose@sap.service`.
+Expected deployment layout on the VM:
+
+```text
+/opt/sap/current/deploy
+```
+
+Install with:
+
+```sh
+sudo cp deploy/systemd/docker-compose@sap.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now docker-compose@sap.service
+```

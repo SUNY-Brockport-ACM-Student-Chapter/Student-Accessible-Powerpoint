@@ -2,7 +2,7 @@
 
 This directory will become the configuration of record for the Python processing service and ChromaDB deployment on the GCP VM.
 
-Planned files from `docs/refactor/NEXTJS_MIGRATION_DESIGN.md`:
+Files from `docs/refactor/NEXTJS_MIGRATION_DESIGN.md`:
 
 - `docker-compose.yml`
 - `Dockerfile.api`
@@ -10,4 +10,6 @@ Planned files from `docs/refactor/NEXTJS_MIGRATION_DESIGN.md`:
 - `env/.env.example`
 - `systemd/docker-compose@sap.service`
 
-The scaffold PR creates the directory and environment template only. Compose, Caddy, and systemd files should land in a follow-up deployment PR after the service layout is implemented.
+Copy `env/.env.example` to `env/.env` on the VM, fill it from the secured deployment secret store, and keep `env/.env` out of git.
+
+The stack exposes only Caddy on ports 80/443. Chroma and the Python API stay inside the Docker network.
