@@ -1,0 +1,15 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$PROCESSOR_PUBLIC_HOST} {
+	encode zstd gzip
+
+	@jobs path /jobs/*
+	@health path /health
+
+	reverse_proxy @jobs api:8001
+	reverse_proxy @health api:8001
+
+	respond "not found" 404
+}

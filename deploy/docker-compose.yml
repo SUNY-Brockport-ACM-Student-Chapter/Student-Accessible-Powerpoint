@@ -1,0 +1,65 @@
+services:
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    restart: unless-stopped
+    volumes:
+      - chroma_data:/chroma/chroma
+    expose:
+      - "8000"
+    networks:
+      - sap_net
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    env_file:
+      - path: env/.env.example
+        required: true
+      - path: env/.env
+        required: false
+    environment:
+      CHROMA_SERVER_HOST: chroma
+      CHROMA_SERVER_HTTP_PORT: 8000
+      CHROMA_API_URL: http://api:8001
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    expose:
+      - "8001"
+    depends_on:
+      - chroma
+    networks:
+      - sap_net
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    env_file:
+      - path: env/caddy.env.example
+        required: true
+      - path: env/caddy.env
+        required: false
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    networks:
+      - sap_net
+
+networks:
+  sap_net:
+    driver: bridge
+
+volumes:
+  chroma_data:
+  caddy_data:
+  caddy_config:

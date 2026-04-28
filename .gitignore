@@ -22,3 +22,5 @@ nextjs/out/
 nextjs/tsconfig.tsbuildinfo
 nextjs/src/generated/prisma/
 nextjs/.env*.local
+deploy/env/.env
+deploy/env/caddy.env
