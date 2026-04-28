@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { requireCurrentProfile } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { createOutputSignedDownloadUrl } from "@/lib/storage";
 
 type DownloadPageProps = {
   params: Promise<{
@@ -35,6 +36,12 @@ export default async function DownloadPage({ params }: DownloadPageProps) {
     redirect(`/process/${jobId}`);
   }
 
+  if (!job.outputObjectPath) {
+    notFound();
+  }
+
+  const signedUrl = await createOutputSignedDownloadUrl(job.outputObjectPath);
+
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-6 px-6 py-16">
       <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
@@ -44,12 +51,15 @@ export default async function DownloadPage({ params }: DownloadPageProps) {
         Accessible deck ready
       </h1>
       <p className="text-lg leading-8 text-slate-700">
-        `{job.uploadedFilename}` has been rebuilt. The signed download button
-        will be added in the download-flow slice.
+        `{job.uploadedFilename}` has been rebuilt. This link expires in 10
+        minutes.
       </p>
-      <p className="rounded-lg bg-slate-100 p-4 font-mono text-sm text-slate-700">
-        {job.outputObjectPath}
-      </p>
+      <a
+        className="w-fit rounded-lg bg-blue-700 px-5 py-3 font-semibold text-white"
+        href={signedUrl}
+      >
+        Download Accessible PowerPoint
+      </a>
     </main>
   );
 }
