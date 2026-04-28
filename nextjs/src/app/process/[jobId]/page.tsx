@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { StatusPoller } from "@/components/StatusPoller";
 import { requireCurrentProfile } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -70,6 +71,7 @@ export default async function ProcessPage({ params }: ProcessPageProps) {
           ) : null}
         </dl>
       </div>
+      <StatusPoller jobId={jobId} />
     </main>
   );
 }
