@@ -13,7 +13,7 @@ export async function GET(
     return fail(
       {
         code: "UNAUTHORIZED",
-        message: "Sign in before viewing job status.",
+        message: "Sign in before viewing descriptions.",
         retryable: false,
       },
       401,
@@ -27,18 +27,9 @@ export async function GET(
       profileId: profile.id,
     },
     select: {
-      id: true,
-      status: true,
-      phase: true,
-      progressCurrent: true,
-      progressTotal: true,
-      outputObjectPath: true,
-      errorCode: true,
-      errorMessage: true,
-      createdAt: true,
-      startedAt: true,
-      awaitingReviewAt: true,
-      readyAt: true,
+      descriptions: {
+        orderBy: [{ slideNumber: "asc" }, { orderNumber: "asc" }],
+      },
     },
   });
 
@@ -53,5 +44,5 @@ export async function GET(
     );
   }
 
-  return ok({ job });
+  return ok({ descriptions: job.descriptions });
 }
